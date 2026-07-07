@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+data/hospital.db
+.chainlit/translations/
+.files/
+.pytest_cache/
+docs/INTERVIEW_GUIDE.md

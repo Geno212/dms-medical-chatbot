@@ -1,0 +1,16 @@
+# Core engine
+langgraph>=0.5
+openai>=1.90            # OpenAI-compatible client (works with Ollama, LM Studio, Groq, OpenAI)
+numpy>=1.26
+
+# UI
+chainlit>=2.9
+
+# Supabase / PostgreSQL backend (used when DATABASE_URL is set)
+psycopg2-binary>=2.9
+
+# Optional: local speech-to-text (voice input). Comment out if not needed.
+faster-whisper>=1.0
+
+# Tests
+pytest>=8.0

@@ -1,0 +1,246 @@
+{
+  "hospital_group": {
+    "name_en": "Al-Mashreq Medical Group",
+    "name_ar": "مجموعة المشرق الطبية",
+    "tagline_en": "Trusted care across the region, close to you.",
+    "tagline_ar": "رعاية موثوقة في جميع أنحاء المنطقة، قريبة منك."
+  },
+  "branches": [
+    {
+      "id": "BR-CAI",
+      "name_en": "Cairo",
+      "name_ar": "القاهرة",
+      "aliases_en": ["cairo branch", "cairo"],
+      "aliases_ar": ["فرع القاهرة", "القاهره"],
+      "address_en": "12 Nile Corniche, Maadi, Cairo, Egypt",
+      "address_ar": "12 كورنيش النيل، المعادي، القاهرة، مصر",
+      "phone": "+20-2-2525-1000"
+    },
+    {
+      "id": "BR-ALX",
+      "name_en": "Alexandria",
+      "name_ar": "الإسكندرية",
+      "aliases_en": ["alexandria branch", "alex", "alexandria"],
+      "aliases_ar": ["فرع الإسكندرية", "اسكندرية", "الاسكندريه"],
+      "address_en": "45 El-Geish Road, Sidi Gaber, Alexandria, Egypt",
+      "address_ar": "45 طريق الجيش، سيدي جابر، الإسكندرية، مصر",
+      "phone": "+20-3-5450-2000"
+    },
+    {
+      "id": "BR-RUH",
+      "name_en": "Riyadh",
+      "name_ar": "الرياض",
+      "aliases_en": ["riyadh branch", "riyadh"],
+      "aliases_ar": ["فرع الرياض", "الرياض"],
+      "address_en": "King Fahd Road, Al Olaya District, Riyadh, Saudi Arabia",
+      "address_ar": "طريق الملك فهد، حي العليا، الرياض، المملكة العربية السعودية",
+      "phone": "+966-11-460-3000"
+    }
+  ],
+  "specializations": [
+    {
+      "id": "SP-CARD",
+      "name_en": "Cardiology",
+      "name_ar": "أمراض القلب",
+      "aliases_en": ["heart", "cardiac", "cardiologist", "cardiologists"],
+      "aliases_ar": ["قلب", "القلب", "قلبية", "طبيب قلب", "دكتور قلب"]
+    },
+    {
+      "id": "SP-NEUR",
+      "name_en": "Neurology",
+      "name_ar": "المخ والأعصاب",
+      "aliases_en": ["brain", "nerves", "neurologist", "neurologists", "neuro"],
+      "aliases_ar": ["أعصاب", "اعصاب", "مخ واعصاب", "طبيب أعصاب", "عصبية"]
+    },
+    {
+      "id": "SP-ORTH",
+      "name_en": "Orthopedics",
+      "name_ar": "جراحة العظام",
+      "aliases_en": ["bones", "orthopedic", "orthopedist", "ortho", "joints"],
+      "aliases_ar": ["عظام", "العظام", "طبيب عظام", "مفاصل"]
+    },
+    {
+      "id": "SP-DERM",
+      "name_en": "Dermatology",
+      "name_ar": "الأمراض الجلدية",
+      "aliases_en": ["skin", "dermatologist", "derma"],
+      "aliases_ar": ["جلدية", "الجلدية", "جلد", "طبيب جلدية"]
+    },
+    {
+      "id": "SP-PEDI",
+      "name_en": "Pediatrics",
+      "name_ar": "طب الأطفال",
+      "aliases_en": ["children", "kids", "pediatrician", "child doctor"],
+      "aliases_ar": ["أطفال", "اطفال", "طبيب أطفال", "دكتور أطفال"]
+    },
+    {
+      "id": "SP-INTM",
+      "name_en": "Internal Medicine",
+      "name_ar": "الباطنة",
+      "aliases_en": ["internist", "general medicine", "internal"],
+      "aliases_ar": ["باطنة", "الباطنة", "باطنية", "طبيب باطنة"]
+    },
+    {
+      "id": "SP-ENT",
+      "name_en": "ENT",
+      "name_ar": "الأنف والأذن والحنجرة",
+      "aliases_en": ["ear nose throat", "otolaryngology", "ent doctor"],
+      "aliases_ar": ["أنف وأذن", "انف واذن وحنجرة", "أذن", "حنجرة"]
+    },
+    {
+      "id": "SP-GAST",
+      "name_en": "Gastroenterology",
+      "name_ar": "الجهاز الهضمي",
+      "aliases_en": ["stomach", "digestive", "gastro", "gastroenterologist"],
+      "aliases_ar": ["جهاز هضمي", "هضمي", "معدة", "طبيب معدة"]
+    }
+  ],
+  "doctors": [
+    { "id": "DOC-001", "name_en": "Dr. Sarah Hassan", "name_ar": "د. سارة حسن", "specialization_id": "SP-NEUR", "branch_id": "BR-CAI", "title_en": "Consultant Neurologist", "title_ar": "استشارية المخ والأعصاب" },
+    { "id": "DOC-002", "name_en": "Dr. Omar El-Sayed", "name_ar": "د. عمر السيد", "specialization_id": "SP-NEUR", "branch_id": "BR-ALX", "title_en": "Neurology Specialist", "title_ar": "أخصائي المخ والأعصاب" },
+    { "id": "DOC-003", "name_en": "Dr. Khalid Al-Mansouri", "name_ar": "د. خالد المنصوري", "specialization_id": "SP-CARD", "branch_id": "BR-RUH", "title_en": "Consultant Cardiologist", "title_ar": "استشاري أمراض القلب" },
+    { "id": "DOC-004", "name_en": "Dr. Layla Nasser", "name_ar": "د. ليلى ناصر", "specialization_id": "SP-CARD", "branch_id": "BR-RUH", "title_en": "Interventional Cardiologist", "title_ar": "أخصائية قسطرة القلب" },
+    { "id": "DOC-005", "name_en": "Dr. Ahmed Mostafa", "name_ar": "د. أحمد مصطفى", "specialization_id": "SP-CARD", "branch_id": "BR-CAI", "title_en": "Consultant Cardiologist", "title_ar": "استشاري أمراض القلب" },
+    { "id": "DOC-006", "name_en": "Dr. Mona Adel", "name_ar": "د. منى عادل", "specialization_id": "SP-CARD", "branch_id": "BR-ALX", "title_en": "Cardiology Specialist", "title_ar": "أخصائية أمراض القلب" },
+    { "id": "DOC-007", "name_en": "Dr. Youssef Ibrahim", "name_ar": "د. يوسف إبراهيم", "specialization_id": "SP-ORTH", "branch_id": "BR-CAI", "title_en": "Consultant Orthopedic Surgeon", "title_ar": "استشاري جراحة العظام" },
+    { "id": "DOC-008", "name_en": "Dr. Rania Fawzy", "name_ar": "د. رانيا فوزي", "specialization_id": "SP-ORTH", "branch_id": "BR-ALX", "title_en": "Orthopedic Specialist", "title_ar": "أخصائية جراحة العظام" },
+    { "id": "DOC-009", "name_en": "Dr. Abdullah Al-Qahtani", "name_ar": "د. عبدالله القحطاني", "specialization_id": "SP-ORTH", "branch_id": "BR-RUH", "title_en": "Consultant Orthopedic Surgeon", "title_ar": "استشاري جراحة العظام" },
+    { "id": "DOC-010", "name_en": "Dr. Nour Khalil", "name_ar": "د. نور خليل", "specialization_id": "SP-DERM", "branch_id": "BR-ALX", "title_en": "Consultant Dermatologist", "title_ar": "استشارية الأمراض الجلدية" },
+    { "id": "DOC-011", "name_en": "Dr. Hana Al-Otaibi", "name_ar": "د. هناء العتيبي", "specialization_id": "SP-DERM", "branch_id": "BR-RUH", "title_en": "Dermatology Specialist", "title_ar": "أخصائية الأمراض الجلدية" },
+    { "id": "DOC-012", "name_en": "Dr. Tarek Shawky", "name_ar": "د. طارق شوقي", "specialization_id": "SP-PEDI", "branch_id": "BR-CAI", "title_en": "Consultant Pediatrician", "title_ar": "استشاري طب الأطفال" },
+    { "id": "DOC-013", "name_en": "Dr. Salma Farid", "name_ar": "د. سلمى فريد", "specialization_id": "SP-PEDI", "branch_id": "BR-ALX", "title_en": "Pediatrics Specialist", "title_ar": "أخصائية طب الأطفال" },
+    { "id": "DOC-014", "name_en": "Dr. Hassan El-Guindy", "name_ar": "د. حسن الجندي", "specialization_id": "SP-INTM", "branch_id": "BR-CAI", "title_en": "Consultant Internist", "title_ar": "استشاري الباطنة" },
+    { "id": "DOC-015", "name_en": "Dr. Fatima Al-Harbi", "name_ar": "د. فاطمة الحربي", "specialization_id": "SP-INTM", "branch_id": "BR-RUH", "title_en": "Internal Medicine Specialist", "title_ar": "أخصائية الباطنة" },
+    { "id": "DOC-016", "name_en": "Dr. Karim Zaki", "name_ar": "د. كريم زكي", "specialization_id": "SP-ENT", "branch_id": "BR-CAI", "title_en": "Consultant ENT Surgeon", "title_ar": "استشاري الأنف والأذن والحنجرة" },
+    { "id": "DOC-017", "name_en": "Dr. Dina Sami", "name_ar": "د. دينا سامي", "specialization_id": "SP-GAST", "branch_id": "BR-CAI", "title_en": "Consultant Gastroenterologist", "title_ar": "استشارية الجهاز الهضمي" },
+    { "id": "DOC-018", "name_en": "Dr. Sultan Al-Dossari", "name_ar": "د. سلطان الدوسري", "specialization_id": "SP-GAST", "branch_id": "BR-RUH", "title_en": "Gastroenterology Specialist", "title_ar": "أخصائي الجهاز الهضمي" }
+  ],
+  "protocols": [
+    {
+      "id": "PROT-001",
+      "specialization_id": "SP-NEUR",
+      "triage": "urgent",
+      "keywords_en": ["severe headache", "fever", "migraine", "head pain", "light sensitivity", "nausea"],
+      "keywords_ar": ["صداع شديد", "حمى", "سخونية", "ألم الرأس", "حساسية الضوء", "غثيان", "صداع"],
+      "content_en": "A severe headache accompanied by fever lasting more than 24 hours may indicate an inflammation or infection that requires medical examination. Rest fully, drink plenty of water, and avoid bright light. If symptoms persist or worsen — especially with neck stiffness, confusion, or vomiting — see a neurologist promptly.",
+      "content_ar": "الصداع الشديد المصحوب بالحمى لمدة تزيد عن 24 ساعة قد يشير إلى التهاب أو عدوى تستوجب الفحص الطبي. يُنصح بالراحة التامة وشرب كميات كافية من الماء وتجنب التعرض للضوء الساطع. إذا استمرت الأعراض أو تفاقمت — خاصة مع تيبس الرقبة أو التشوش أو القيء — فمن المهم مراجعة طبيب المخ والأعصاب في أقرب وقت."
+    },
+    {
+      "id": "PROT-002",
+      "specialization_id": "SP-CARD",
+      "triage": "emergency",
+      "keywords_en": ["chest pain", "shortness of breath", "pressure in chest", "pain radiating to arm", "sweating"],
+      "keywords_ar": ["ألم في الصدر", "ألم الصدر", "ضيق في التنفس", "ضيق التنفس", "ضغط على الصدر", "ألم يمتد للذراع", "تعرق"],
+      "content_en": "Chest pain with shortness of breath can be a sign of a serious heart condition and should be treated as an emergency. If the pain is crushing, radiates to the arm or jaw, or comes with sweating or dizziness, seek emergency care immediately or call an ambulance. For recurrent mild chest discomfort, a cardiology evaluation with an ECG is strongly recommended.",
+      "content_ar": "ألم الصدر المصحوب بضيق في التنفس قد يكون علامة على حالة قلبية خطيرة ويجب التعامل معه كحالة طارئة. إذا كان الألم ضاغطاً أو يمتد إلى الذراع أو الفك، أو مصحوباً بتعرق أو دوخة، فتوجه فوراً إلى الطوارئ أو اتصل بالإسعاف. أما الانزعاج الصدري الخفيف المتكرر فيُنصح بشدة بتقييمه لدى طبيب القلب مع إجراء تخطيط للقلب."
+    },
+    {
+      "id": "PROT-003",
+      "specialization_id": "SP-CARD",
+      "triage": "routine",
+      "keywords_en": ["palpitations", "irregular heartbeat", "racing heart", "skipped beats"],
+      "keywords_ar": ["خفقان", "خفقان القلب", "ضربات قلب سريعة", "عدم انتظام ضربات القلب"],
+      "content_en": "Occasional palpitations are often benign and can be triggered by caffeine, stress, or lack of sleep. However, if palpitations are frequent, last several minutes, or occur with dizziness or fainting, a cardiology assessment including an ECG and possibly a Holter monitor is recommended.",
+      "content_ar": "الخفقان العرضي غالباً ما يكون حميداً وقد ينتج عن الكافيين أو التوتر أو قلة النوم. لكن إذا كان الخفقان متكرراً أو يستمر لعدة دقائق أو يصاحبه دوخة أو إغماء، فيُنصح بتقييم لدى طبيب القلب يشمل تخطيط القلب وربما جهاز هولتر لمراقبة النظم."
+    },
+    {
+      "id": "PROT-004",
+      "specialization_id": "SP-NEUR",
+      "triage": "urgent",
+      "keywords_en": ["dizziness", "vertigo", "numbness", "tingling", "balance problems", "weakness in limbs"],
+      "keywords_ar": ["دوخة", "دوار", "تنميل", "خدر", "فقدان التوازن", "ضعف في الأطراف"],
+      "content_en": "Persistent dizziness with numbness, limb weakness, or balance problems needs neurological evaluation to rule out nerve or circulation issues. Sudden one-sided weakness, facial drooping, or slurred speech are stroke warning signs — call emergency services immediately.",
+      "content_ar": "الدوخة المستمرة المصحوبة بتنميل أو ضعف في الأطراف أو اضطراب التوازن تستدعي تقييماً عصبياً لاستبعاد مشاكل الأعصاب أو الدورة الدموية. أما الضعف المفاجئ في جانب واحد أو تدلي الوجه أو تلعثم الكلام فهي علامات إنذار بالسكتة الدماغية — اتصل بالطوارئ فوراً."
+    },
+    {
+      "id": "PROT-005",
+      "specialization_id": "SP-ORTH",
+      "triage": "routine",
+      "keywords_en": ["back pain", "lower back", "spine pain", "sciatica", "back stiffness"],
+      "keywords_ar": ["ألم الظهر", "أسفل الظهر", "ألم العمود الفقري", "عرق النسا", "تيبس الظهر"],
+      "content_en": "Most lower back pain improves within a few weeks with gentle activity, avoiding heavy lifting, and over-the-counter pain relief. If pain radiates down the leg, causes numbness, or persists beyond two weeks, an orthopedic evaluation is recommended to check the spine and discs.",
+      "content_ar": "معظم آلام أسفل الظهر تتحسن خلال أسابيع قليلة مع الحركة الخفيفة وتجنب حمل الأوزان الثقيلة ومسكنات الألم المتاحة. إذا امتد الألم إلى الساق أو سبب تنميلاً أو استمر أكثر من أسبوعين، يُنصح بتقييم لدى طبيب العظام لفحص العمود الفقري والغضاريف."
+    },
+    {
+      "id": "PROT-006",
+      "specialization_id": "SP-ORTH",
+      "triage": "routine",
+      "keywords_en": ["joint pain", "knee pain", "shoulder pain", "swelling", "stiffness in joints"],
+      "keywords_ar": ["ألم المفاصل", "ألم الركبة", "ألم الكتف", "تورم", "تيبس المفاصل"],
+      "content_en": "Joint pain with swelling or morning stiffness may indicate inflammation or early arthritis. Rest the joint, apply cold compresses for new injuries, and avoid strenuous load. If swelling persists more than a few days or the joint locks, see an orthopedic specialist for examination and imaging.",
+      "content_ar": "ألم المفاصل المصحوب بتورم أو تيبس صباحي قد يشير إلى التهاب أو بداية خشونة. أرِح المفصل وضع كمادات باردة للإصابات الحديثة وتجنب الإجهاد الشديد. إذا استمر التورم لأكثر من بضعة أيام أو حدث انغلاق في المفصل، راجع أخصائي العظام للفحص والأشعة."
+    },
+    {
+      "id": "PROT-007",
+      "specialization_id": "SP-DERM",
+      "triage": "routine",
+      "keywords_en": ["skin rash", "itching", "redness", "eczema", "hives", "allergy skin"],
+      "keywords_ar": ["طفح جلدي", "حكة", "احمرار", "إكزيما", "أرتيكاريا", "حساسية الجلد"],
+      "content_en": "A localized itchy rash is often an allergic reaction or eczema. Keep the area clean and moisturized, avoid scratching and new cosmetic products. If the rash spreads rapidly, blisters, or is accompanied by fever or facial swelling, seek medical care promptly; otherwise a dermatology consultation will identify the cause and proper treatment.",
+      "content_ar": "الطفح الجلدي الموضعي المصحوب بحكة غالباً ما يكون تحسساً أو إكزيما. حافظ على نظافة المنطقة وترطيبها وتجنب الحك والمستحضرات الجديدة. إذا انتشر الطفح بسرعة أو ظهرت بثور أو صاحبته حمى أو تورم في الوجه فاطلب الرعاية الطبية فوراً؛ وفي غير ذلك ستحدد استشارة الجلدية السبب والعلاج المناسب."
+    },
+    {
+      "id": "PROT-008",
+      "specialization_id": "SP-PEDI",
+      "triage": "urgent",
+      "keywords_en": ["child fever", "baby fever", "infant", "child vomiting", "child not eating", "my son", "my daughter", "my child", "my baby"],
+      "keywords_ar": ["حمى الطفل", "سخونية الطفل", "رضيع", "طفل يتقيأ", "طفل لا يأكل", "حرارة عند الأطفال", "ابني", "بنتي", "طفلي", "رضيعي"],
+      "content_en": "For a child with fever, ensure good hydration and use age-appropriate fever reducers. See a pediatrician urgently if the fever exceeds 39°C, lasts more than 48 hours, or the child is under 3 months, unusually drowsy, refusing fluids, or showing a rash that does not fade under pressure.",
+      "content_ar": "عند إصابة الطفل بالحمى، احرص على الترطيب الجيد واستخدم خافض حرارة مناسباً للعمر. راجع طبيب الأطفال بشكل عاجل إذا تجاوزت الحرارة 39 درجة، أو استمرت أكثر من 48 ساعة، أو كان الطفل أقل من 3 أشهر، أو بدا خاملاً بشكل غير معتاد، أو يرفض السوائل، أو ظهر طفح لا يختفي بالضغط عليه."
+    },
+    {
+      "id": "PROT-009",
+      "specialization_id": "SP-GAST",
+      "triage": "routine",
+      "keywords_en": ["stomach pain", "abdominal pain", "bloating", "heartburn", "acid reflux", "indigestion"],
+      "keywords_ar": ["ألم المعدة", "ألم البطن", "انتفاخ", "حرقة المعدة", "ارتجاع", "عسر هضم"],
+      "content_en": "Recurrent stomach pain with bloating or heartburn is commonly related to acid reflux or gastritis. Eat smaller meals, avoid late-night eating, caffeine, and spicy food. If symptoms persist beyond two weeks, include vomiting, weight loss, or black stools, a gastroenterology evaluation is needed.",
+      "content_ar": "ألم المعدة المتكرر مع الانتفاخ أو الحرقة يرتبط غالباً بالارتجاع أو التهاب المعدة. تناول وجبات أصغر وتجنب الأكل المتأخر ليلاً والكافيين والأطعمة الحارة. إذا استمرت الأعراض أكثر من أسبوعين أو صاحبها قيء أو فقدان وزن أو براز أسود، فيلزم تقييم لدى طبيب الجهاز الهضمي."
+    },
+    {
+      "id": "PROT-010",
+      "specialization_id": "SP-ENT",
+      "triage": "routine",
+      "keywords_en": ["sore throat", "ear pain", "earache", "sinus", "blocked nose", "tonsils", "hoarseness"],
+      "keywords_ar": ["التهاب الحلق", "ألم الأذن", "جيوب أنفية", "انسداد الأنف", "لوز", "بحة الصوت"],
+      "content_en": "A sore throat or ear pain lasting a few days is usually viral and improves with warm fluids, rest, and pain relief. If pain is severe, one-sided, accompanied by high fever, ear discharge, or lasts more than five days, an ENT examination is recommended to rule out bacterial infection.",
+      "content_ar": "التهاب الحلق أو ألم الأذن لبضعة أيام يكون غالباً فيروسياً ويتحسن بالسوائل الدافئة والراحة والمسكنات. إذا كان الألم شديداً أو في جهة واحدة أو مصحوباً بحمى مرتفعة أو إفرازات من الأذن أو استمر أكثر من خمسة أيام، يُنصح بفحص لدى طبيب الأنف والأذن والحنجرة لاستبعاد عدوى بكتيرية."
+    },
+    {
+      "id": "PROT-011",
+      "specialization_id": "SP-INTM",
+      "triage": "routine",
+      "keywords_en": ["fatigue", "tiredness", "weakness", "low energy", "general weakness"],
+      "keywords_ar": ["إرهاق", "تعب", "خمول", "ضعف عام", "فقدان الطاقة"],
+      "content_en": "Persistent fatigue lasting more than two weeks despite adequate sleep can result from anemia, thyroid issues, vitamin deficiency, or chronic stress. An internal medicine consultation with basic blood tests (CBC, thyroid, vitamin D and B12) is the right starting point.",
+      "content_ar": "الإرهاق المستمر لأكثر من أسبوعين رغم النوم الكافي قد ينتج عن فقر الدم أو مشاكل الغدة الدرقية أو نقص الفيتامينات أو الإجهاد المزمن. استشارة طبيب الباطنة مع تحاليل دم أساسية (صورة دم، الغدة الدرقية، فيتامين د وب12) هي نقطة البداية الصحيحة."
+    },
+    {
+      "id": "PROT-012",
+      "specialization_id": "SP-INTM",
+      "triage": "routine",
+      "keywords_en": ["flu", "cough", "cold", "runny nose", "body aches", "mild fever"],
+      "keywords_ar": ["إنفلونزا", "سعال", "كحة", "برد", "رشح", "آلام الجسم", "حمى خفيفة"],
+      "content_en": "Common cold and flu symptoms usually resolve within a week with rest, fluids, and symptom relief. See a doctor if you have difficulty breathing, chest pain, fever above 39°C for more than three days, or if you have a chronic condition such as diabetes or asthma.",
+      "content_ar": "أعراض البرد والإنفلونزا تزول عادة خلال أسبوع مع الراحة والسوائل ومسكنات الأعراض. راجع الطبيب إذا واجهت صعوبة في التنفس أو ألماً في الصدر أو حمى فوق 39 درجة لأكثر من ثلاثة أيام، أو كنت مصاباً بمرض مزمن مثل السكري أو الربو."
+    },
+    {
+      "id": "PROT-013",
+      "specialization_id": "SP-NEUR",
+      "triage": "routine",
+      "keywords_en": ["migraine", "recurring headache", "aura", "headache with nausea", "tension headache"],
+      "keywords_ar": ["شقيقة", "صداع نصفي", "صداع متكرر", "صداع مع غثيان", "صداع توتري"],
+      "content_en": "Recurring one-sided headaches with nausea or light sensitivity suggest migraine. Keep a headache diary, maintain regular sleep, and identify triggers such as certain foods or stress. A neurologist can confirm the diagnosis and prescribe preventive treatment if attacks are frequent.",
+      "content_ar": "الصداع المتكرر في جانب واحد مع غثيان أو حساسية للضوء يشير إلى الشقيقة (الصداع النصفي). احتفظ بمفكرة للصداع وحافظ على نوم منتظم وحدد المحفزات مثل أطعمة معينة أو التوتر. يمكن لطبيب المخ والأعصاب تأكيد التشخيص ووصف علاج وقائي إذا كانت النوبات متكررة."
+    },
+    {
+      "id": "PROT-014",
+      "specialization_id": "SP-GAST",
+      "triage": "urgent",
+      "keywords_en": ["severe abdominal pain", "vomiting blood", "black stool", "persistent diarrhea", "dehydration"],
+      "keywords_ar": ["ألم بطن شديد", "قيء دم", "براز أسود", "إسهال مستمر", "جفاف"],
+      "content_en": "Severe abdominal pain, vomiting blood, or black stools are warning signs of gastrointestinal bleeding and require urgent medical attention — go to the emergency department. Persistent diarrhea beyond three days with signs of dehydration also needs prompt evaluation by a gastroenterologist.",
+      "content_ar": "ألم البطن الشديد أو قيء الدم أو البراز الأسود علامات تحذيرية لنزيف في الجهاز الهضمي وتتطلب رعاية طبية عاجلة — توجه إلى قسم الطوارئ. كما أن الإسهال المستمر لأكثر من ثلاثة أيام مع علامات الجفاف يستدعي تقييماً سريعاً لدى طبيب الجهاز الهضمي."
+    }
+  ]
+}
