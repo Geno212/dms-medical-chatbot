@@ -36,7 +36,7 @@ locally. No patient utterance ever leaves the machine.**
 |---|---|---|
 | Orchestration | **LangGraph** | Explicit stateful graph: routing, per-thread conversation memory (checkpointer), and a clean place for the clinical-context slot-filling that makes multi-turn booking work. |
 | LLM | **Ollama** (`qwen2.5:7b-instruct`, OpenAI-compatible API) | Qwen2.5 has strong Arabic among open models and reliable JSON output. Local inference = medical privacy. The client is endpoint-agnostic: point `LLM_BASE_URL` at LM Studio, Groq, or OpenAI and nothing else changes. |
-| Knowledge base + data | **SQLite + in-process vector search** | Zero-setup for reviewers, fully local. The schema and retrieval interface port directly to Postgres/pgvector (Supabase) for production — see §7. |
+| Knowledge base + data | **SQLite** (default) or **Supabase/PostgreSQL + pgvector** | Two interchangeable backends behind one repository interface. SQLite gives reviewers zero-setup clone-and-run; setting `DATABASE_URL` switches the whole system to Supabase for a cloud deployment — see §7. |
 | Embeddings | **bge-m3** (via Ollama) | Genuinely multilingual — one vector space for Arabic and English symptom text. |
 | Retrieval | **Hybrid: dense cosine + curated bilingual symptom keywords** | Keywords keep short Arabic symptom phrases precise and keep the bot grounded even if the embedding model is missing; dense vectors catch paraphrases. |
 | STT | **faster-whisper** (local) | Whisper is the reference open model for Arabic speech; auto language detection; runs on CPU with the `small` model. |
@@ -155,6 +155,12 @@ No Ollama? Point `.env` at any OpenAI-compatible endpoint (LM Studio, Groq,
 OpenAI) — see `.env.example`. No embedding model? `seed_db.py --skip-embeddings`
 still works: retrieval falls back to the bilingual lexical channel.
 
+> **Low-VRAM GPU tip:** on machines with a small discrete GPU (≤2 GB VRAM),
+> Ollama may crash trying to partially offload the 7B model. Force stable
+> CPU-only inference by starting the server with the GPU hidden:
+> `CUDA_VISIBLE_DEVICES=-1 ollama serve` (PowerShell:
+> `$env:CUDA_VISIBLE_DEVICES="-1"; ollama serve`).
+
 **Voice**: `pip install faster-whisper` (already in requirements). First use
 downloads the Whisper model. In the web UI use the mic button or attach an
 audio file; in the CLI use `/voice path/to/audio.wav`.
@@ -162,13 +168,38 @@ audio file; in the CLI use `/voice path/to/audio.wav`.
 ## 5. Tests
 
 ```bash
-python -m pytest tests/ -q     # 31 tests
+python -m pytest tests/ -q     # 33 tests
 ```
 
 The suite injects a scripted fake LLM, so the full pipeline — routing,
 retrieval grounding, bilingual entity resolution, multi-turn slot-filling,
 verified payload construction, ambiguity refusal, heuristic fallback — is
 tested deterministically without a model server.
+
+## 5b. Pipeline logging (observability)
+
+Every graph node logs its decision to a dedicated `chatbot` logger
+(`app/logging_setup.py`), so a single conversation turn prints a visible
+trace of the "LLM understands, code decides" split as it happens:
+
+```
+chatbot INFO: router: message="I've been having a severe headache and fever..." language=en intent=medical action=none source=llm
+chatbot INFO: retrieval: query="I've been having a severe headache..." hits=[('PROT-001', 0.8013, 'urgent'), ('PROT-013', 0.5174, 'routine'), ...]
+chatbot INFO: clinical context updated: suggested_specialization=Neurology
+chatbot INFO: router: message='Yes, please book me an appointment' language=en intent=action action=book source=llm
+chatbot INFO: slot extraction: {'doctor_name': None, 'specialty': 'Neurology', 'branch': None}
+chatbot INFO: entity resolution: branch=None -> None (0 candidates) | specialty='Neurology' -> Neurology (1 candidates)
+chatbot INFO: 2 doctors match specialty Neurology -> asking user to choose
+chatbot INFO: slot extraction: {'doctor_name': 'Dr. Sarah Hassan', 'specialty': 'Neurology', 'branch': 'Cairo'}
+chatbot INFO: doctor resolved: 'Dr. Sarah Hassan' -> Dr. Sarah Hassan (DOC-001)
+```
+(real trace from `scripts/generate_examples.py` — the transcript in
+`examples/01_multi_turn_medical_to_booking.md`)
+
+Set `LOG_LEVEL=DEBUG` in `.env` to also see raw LLM JSON output, or
+`LOG_LEVEL=WARNING` to silence it (only triage escalations and fallbacks
+still print). Runs automatically for the CLI, Chainlit UI, and any script
+that calls `build_graph()`.
 
 ## 6. Test dataset
 
@@ -178,12 +209,26 @@ Medical Group** (مجموعة المشرق الطبية), 3 branches (Cairo, Ale
 triage levels and curated Arabic/English symptom keywords. Edit it and re-run
 `scripts/seed_db.py` to change the hospital.
 
-## 7. Production path
+## 7. Running on Supabase (PostgreSQL + pgvector)
 
-* **SQLite → Supabase/Postgres + pgvector**: `Repository` and
-  `ProtocolRetriever` are thin interfaces; the schema is already relational
-  (FKs between doctors/specializations/branches) and the embedding column maps
-  to a `vector` type. Swap the connection layer, keep the graph untouched.
+The Postgres backend is already implemented (`app/db_postgres.py`) behind the
+same repository interface — no code changes needed:
+
+```bash
+# 1. Create a free project at supabase.com
+# 2. Dashboard -> Connect -> Connection String -> copy the Session pooler URI
+# 3. In .env:
+DATABASE_URL=postgresql://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.com:5432/postgres
+# 4. Seed the cloud database (creates schema + pgvector extension automatically)
+python scripts/seed_db.py
+```
+
+Everything — graph, matching, retrieval, UI — now runs against Supabase.
+Protocol embeddings are stored in a pgvector `vector` column; at the current
+KB size dense ranking happens in-process, and at scale it moves into SQL
+(`ORDER BY embedding <=> $1`) without touching the interface.
+
+## 8. Production path
 * **MemorySaver → Postgres checkpointer** for conversation persistence across
   restarts.
 * Real booking write-path (appointments table + availability), auth, and an
