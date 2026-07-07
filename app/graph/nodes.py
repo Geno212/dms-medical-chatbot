@@ -16,12 +16,14 @@ from typing import Any
 from ..config import Config, get_config
 from ..db import Repository
 from ..llm import ChatLLM, extract_json
+from ..logging_setup import get_logger
 from ..matching import resolve_doctor, resolve_entity
 from ..vectorstore import ProtocolRetriever
 from . import prompts
 from .state import ChatState
 
 _ARABIC_CHARS = re.compile(r"[؀-ۿ]")
+log = get_logger()
 
 
 def detect_language(text: str) -> str:
@@ -69,18 +71,31 @@ class ChatbotEngine:
         user_message = self._last_user_message(state)
         language = detect_language(user_message)
         intent, action = "medical", "none"
+        source = "llm"
         try:
             raw = self.llm.chat(prompts.ROUTER_SYSTEM, self._history(state), json_mode=True)
+            log.debug("router raw LLM output: %s", raw)
             parsed = extract_json(raw) or {}
             if parsed.get("intent") in ("medical", "action", "other"):
                 intent = parsed["intent"]
             action = parsed.get("action") or "none"
             if action not in ("book", "list_doctors", "list_specializations", "list_branches"):
                 action = "none"
-        except Exception:
+        except Exception as exc:
+            source = "heuristic-fallback"
             intent, action = self._heuristic_route(user_message)
+            log.warning("router LLM call failed (%s: %s) -> falling back to keyword heuristics", type(exc).__name__, exc)
+        if action != "none" and intent != "action":
+            # Contradictory LLM output (e.g. intent=medical + action=list_doctors).
+            # The named action is the more specific signal — trust it.
+            log.info("router emitted intent=%s with action=%s -> coercing intent to 'action'", intent, action)
+            intent = "action"
         if intent == "action" and action == "none":
             action = "book"  # affirmative reply to a booking offer, most common case
+        log.info(
+            "router: message=%r language=%s intent=%s action=%s source=%s",
+            user_message[:80], language, intent, action, source,
+        )
         return {"intent": intent, "action": action, "language": language}
 
     @staticmethod
@@ -103,6 +118,11 @@ class ChatbotEngine:
         language = state.get("language", "en")
         user_message = self._last_user_message(state)
         protocols = self.retriever.search(user_message, top_k=self.config.retrieval_top_k)
+        log.info(
+            "retrieval: query=%r hits=%s",
+            user_message[:80],
+            [(p["id"], p["score"], p["triage"]) for p in protocols],
+        )
 
         clinical = dict(state.get("clinical", {}))
         specialty_name = "the relevant specialty" if language == "en" else "التخصص المناسب"
@@ -116,8 +136,10 @@ class ChatbotEngine:
                     "symptoms": user_message,
                 }
                 specialty_name = specialization["name_en"] if language == "en" else specialization["name_ar"]
+                log.info("clinical context updated: suggested_specialization=%s", specialization["name_en"])
             if any(p["triage"] == "emergency" for p in protocols[:2]):
                 triage_note = prompts.TRIAGE_EMERGENCY_NOTE
+                log.warning("triage escalation: emergency protocol matched for %r", user_message[:80])
 
         content_key = "content_ar" if language == "ar" else "content_en"
         protocol_text = "\n".join(f"- {p[content_key]}" for p in protocols) or (
@@ -148,9 +170,15 @@ class ChatbotEngine:
         language = state.get("language", "en")
         action = state.get("action", "book")
         slots = self._extract_slots(state)
+        log.info("slot extraction: %s", slots)
 
-        branch, _ = resolve_entity(slots.get("branch"), self.repo.list_branches())
-        specialization, _ = resolve_entity(slots.get("specialty"), self.repo.list_specializations())
+        branch, branch_candidates = resolve_entity(slots.get("branch"), self.repo.list_branches())
+        specialization, spec_candidates = resolve_entity(slots.get("specialty"), self.repo.list_specializations())
+        log.info(
+            "entity resolution: branch=%r -> %s (%d candidates) | specialty=%r -> %s (%d candidates)",
+            slots.get("branch"), branch and branch["name_en"], len(branch_candidates),
+            slots.get("specialty"), specialization and specialization["name_en"], len(spec_candidates),
+        )
 
         # Slot-filling from conversation memory: if the user never named a
         # specialty but the medical discussion pointed to one, carry it over.
@@ -158,6 +186,7 @@ class ChatbotEngine:
             specialization = self.repo.get_specialization(
                 state["clinical"]["suggested_specialization_id"]
             )
+            log.info("specialty carried over from clinical context: %s", specialization and specialization["name_en"])
 
         if action == "list_branches":
             return self._reply(self._list_branches_response(language))
@@ -227,6 +256,23 @@ class ChatbotEngine:
         doctors = self.repo.list_doctors()
         doctor_query = slots.get("doctor_name")
 
+        # The extractor occasionally mislabels a specialty mention as a doctor
+        # name (e.g. the user echoes the assistant's "our Neurology doctors"
+        # and the LLM emits doctor_name="Neurology"). A specialization is
+        # never a person: reroute it to the specialty slot instead of failing
+        # the doctor lookup with "no doctor named Neurology".
+        if doctor_query:
+            as_specialization, _ = resolve_entity(
+                doctor_query, self.repo.list_specializations()
+            )
+            if as_specialization:
+                log.info(
+                    "doctor_name %r resolved as a specialty (%s), not a person -> rerouted to specialty slot",
+                    doctor_query, as_specialization["name_en"],
+                )
+                specialization = specialization or as_specialization
+                doctor_query = None
+
         if doctor_query:
             doctor, candidates = resolve_doctor(
                 doctor_query,
@@ -235,10 +281,13 @@ class ChatbotEngine:
                 branch["id"] if branch else None,
             )
             if doctor:
+                log.info("doctor resolved: %r -> %s (%s)", doctor_query, doctor["name_en"], doctor["id"])
                 return self._verified_booking(doctor)
             if candidates:  # ambiguous mention — never guess a doctor
+                log.info("doctor mention ambiguous: %r -> %d candidates, asking user to clarify", doctor_query, len(candidates))
                 return {"answer": self._ask_choose_doctor(candidates, language)}
             pool = self.repo.list_doctors(specialization["id"] if specialization else None)
+            log.info("doctor not found: %r has no match in database", doctor_query)
             return {"answer": self._doctor_not_found(doctor_query, pool or doctors, language)}
 
         # No doctor named: offer the real options for the (inferred) specialty.
@@ -248,7 +297,9 @@ class ChatbotEngine:
         )
         if specialization and pool:
             if len(pool) == 1:
+                log.info("single doctor matches specialty %s -> auto-resolved: %s", specialization["name_en"], pool[0]["name_en"])
                 return self._verified_booking(pool[0])
+            log.info("%d doctors match specialty %s -> asking user to choose", len(pool), specialization["name_en"])
             return {"answer": self._ask_choose_doctor(pool, language)}
         if language == "ar":
             return {"answer": "يسعدني مساعدتك في حجز موعد. مع أي تخصص أو طبيب تود الحجز؟ يمكنك أيضاً وصف الأعراض وسأرشح لك التخصص المناسب."}

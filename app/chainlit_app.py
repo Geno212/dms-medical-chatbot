@@ -15,12 +15,21 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import uuid
 import wave
+from pathlib import Path
+
+# Ensure the project root (medical-chatbot/) is on sys.path so that
+# `app.*` imports work whether this file is loaded by Chainlit directly
+# (as a file path) or as part of the package.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import chainlit as cl
 
-from .graph.build import build_graph, chat_turn
+from app.graph.build import build_graph, chat_turn
 
 graph = build_graph()
 
@@ -51,7 +60,7 @@ async def respond(user_text: str):
 
 
 async def handle_audio_bytes(audio_bytes: bytes, hint: str = "audio"):
-    from .stt import TranscriptionUnavailable, transcribe
+    from app.stt import TranscriptionUnavailable, transcribe
 
     import tempfile
 

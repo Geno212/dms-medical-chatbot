@@ -23,6 +23,11 @@ Intents:
 IMPORTANT: If the assistant just offered to book an appointment and the user
 replies affirmatively ("yes", "ok", "نعم", "اه احجزلي", "تمام"), that is
 intent "action" with action "book".
+IMPORTANT: Questions about which doctors, specializations, or branches EXIST
+(e.g. "Who are the cardiologists at the Riyadh branch?", "ما هي فروع المستشفى؟")
+are intent "action" with the matching list_* action — NOT "medical" — even
+though they mention medical topics. "medical" is only for the user's own
+symptoms or health questions.
 Users may write in Arabic or English.
 
 Respond with ONLY a JSON object:
@@ -39,6 +44,10 @@ Rules:
 - Extract mentions in whatever language the user used; do NOT translate.
 - Use the most recent value if the user changed their mind.
 - null for anything not mentioned. Never invent values.
+- doctor_name must be a PERSON's name. A specialty or department (e.g.
+  "Neurology", "جلدية") is NEVER a doctor_name — it belongs in specialty.
+- If the user simply agrees to book ("yes, book me", "اه احجزلي") without
+  naming a specific doctor themselves, doctor_name is null.
 
 Respond with ONLY a JSON object:
 {"doctor_name": string | null, "specialty": string | null, "branch": string | null}"""

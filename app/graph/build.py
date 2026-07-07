@@ -25,6 +25,7 @@ from langgraph.graph import END, START, StateGraph
 from ..config import Config, get_config
 from ..db import Repository, get_repository
 from ..llm import ChatLLM, EmbeddingClient, OpenAICompatLLM
+from ..logging_setup import configure_logging
 from ..vectorstore import ProtocolRetriever
 from .nodes import ChatbotEngine
 from .state import ChatState
@@ -37,6 +38,7 @@ def build_graph(
     config: Config | None = None,
 ):
     config = config or get_config()
+    configure_logging(config)
     repo = repo or get_repository(config)
     llm = llm or OpenAICompatLLM(config)
     embedder = embedder if embedder is not None else EmbeddingClient(config)

@@ -45,10 +45,12 @@ class Config:
 
     # --- Storage ---
     # Backend: "sqlite" (zero-setup default) or "postgres" (Supabase/pgvector).
-    # Setting DATABASE_URL implies postgres unless DB_BACKEND says otherwise.
-    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
+    # Use APP_DATABASE_URL (preferred) or DATABASE_URL to activate Postgres.
+    # APP_DATABASE_URL avoids a collision with Chainlit's own data-layer which
+    # intercepts the bare DATABASE_URL env var and exhausts the session pooler.
+    database_url: str = field(default_factory=lambda: os.getenv("APP_DATABASE_URL", os.getenv("DATABASE_URL", "")))
     db_backend: str = field(default_factory=lambda: os.getenv(
-        "DB_BACKEND", "postgres" if os.getenv("DATABASE_URL") else "sqlite"))
+        "DB_BACKEND", "postgres" if (os.getenv("APP_DATABASE_URL") or os.getenv("DATABASE_URL")) else "sqlite"))
     db_path: Path = field(default_factory=lambda: Path(os.getenv("DB_PATH", str(PROJECT_ROOT / "data" / "hospital.db"))))
     dataset_path: Path = field(default_factory=lambda: Path(os.getenv("DATASET_PATH", str(PROJECT_ROOT / "data" / "hospital_dataset.json"))))
 
@@ -59,6 +61,10 @@ class Config:
     # --- Conversation ---
     history_window: int = field(default_factory=lambda: int(os.getenv("HISTORY_WINDOW", "12")))
     retrieval_top_k: int = field(default_factory=lambda: int(os.getenv("RETRIEVAL_TOP_K", "3")))
+
+    # --- Logging (pipeline trace: router decisions, slot extraction, entity
+    # resolution, retrieval hits — set LOG_LEVEL=WARNING to silence) ---
+    log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
 
 
 _config: Config | None = None

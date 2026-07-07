@@ -85,6 +85,55 @@ def test_multi_turn_booking_resolves_after_choice(repo):
     assert final["specialty"] == "Neurology"  # carried from the medical turn
 
 
+def test_specialty_mislabeled_as_doctor_name_is_not_rejected(repo):
+    """Regression: after the bot offered "our Neurology doctors", the user said
+    "yes, book me" and the extractor emitted doctor_name="Neurology". The bot
+    must recognize that as a specialty and offer its real doctors — not reply
+    'we don't have a doctor named "Neurology"'."""
+    llm = FakeLLM(
+        router=[
+            {"intent": "medical", "action": "none"},
+            {"intent": "action", "action": "book"},
+        ],
+        slots={"doctor_name": "Neurology", "specialty": None, "branch": None},
+    )
+    graph, thread = run_graph(repo, llm)
+    chat_turn(graph, thread, "I've had a severe headache and fever for two days")
+    response = chat_turn(graph, thread, "Yes, book me an appointment")
+    assert "answer" in response
+    assert "don't have a doctor" not in response["answer"]
+    assert "Dr. Sarah Hassan" in response["answer"]
+    assert "Dr. Omar El-Sayed" in response["answer"]
+
+
+def test_booking_with_specialty_as_doctor_name_single_turn(repo):
+    llm = FakeLLM(
+        router={"intent": "action", "action": "book"},
+        slots={"doctor_name": "Neurology", "specialty": "Neurology", "branch": None},
+    )
+    graph, thread = run_graph(repo, llm)
+    response = chat_turn(graph, thread, "Book me an appointment with Neurology")
+    assert "answer" in response
+    assert "don't have a doctor" not in response["answer"]
+    assert "Dr. Sarah Hassan" in response["answer"]
+    assert "Dr. Omar El-Sayed" in response["answer"]
+
+
+def test_contradictory_router_output_trusts_the_specific_action(repo):
+    """Regression: the router LLM sometimes emits intent=medical together with
+    a concrete action (e.g. list_doctors). The named action is the more
+    specific signal — the turn must produce the structured lookup, not a
+    medical RAG answer."""
+    llm = FakeLLM(
+        router={"intent": "medical", "action": "list_doctors"},
+        slots={"doctor_name": None, "specialty": "cardiologists", "branch": "Riyadh"},
+    )
+    graph, thread = run_graph(repo, llm)
+    response = chat_turn(graph, thread, "Who are the cardiologists at the Riyadh branch?")
+    assert response["action"] == "list_doctors"
+    assert {d["name"] for d in response["doctors"]} == {"Dr. Khalid Al-Mansouri", "Dr. Layla Nasser"}
+
+
 def test_list_doctors_cardiology_riyadh(repo):
     llm = FakeLLM(
         router={"intent": "action", "action": "list_doctors"},

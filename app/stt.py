@@ -10,6 +10,9 @@ from __future__ import annotations
 from functools import lru_cache
 
 from .config import get_config
+from .logging_setup import get_logger
+
+log = get_logger()
 
 
 class TranscriptionUnavailable(RuntimeError):
@@ -34,4 +37,8 @@ def transcribe(audio_path: str) -> dict:
     model = _get_model()
     segments, info = model.transcribe(audio_path, vad_filter=True)
     text = " ".join(segment.text.strip() for segment in segments).strip()
+    log.info(
+        "stt: file=%s detected_language=%s (p=%.2f) transcribed=%r",
+        audio_path, info.language, info.language_probability, text[:120],
+    )
     return {"transcribed_text": text, "language": info.language}
