@@ -79,7 +79,8 @@ class ChatbotEngine:
             if parsed.get("intent") in ("medical", "action", "other"):
                 intent = parsed["intent"]
             action = parsed.get("action") or "none"
-            if action not in ("book", "list_doctors", "list_specializations", "list_branches"):
+            if action not in ("book", "list_doctors", "list_specializations",
+                              "list_branches", "list_bookings", "cancel_booking"):
                 action = "none"
         except Exception as exc:
             source = "heuristic-fallback"
@@ -102,7 +103,13 @@ class ChatbotEngine:
     def _heuristic_route(text: str) -> tuple[str, str]:
         """Keyword fallback so the bot degrades gracefully if the LLM call fails."""
         lowered = text.lower()
-        if any(w in lowered for w in ("book", "appointment", "حجز", "احجز", "موعد")):
+        booking_words = ("book", "appointment", "حجز", "احجز", "موعد", "مواعيد")
+        if any(w in lowered for w in ("cancel", "الغاء", "إلغاء", "الغي", "ألغي")) \
+                and any(w in lowered for w in booking_words):
+            return "action", "cancel_booking"
+        if any(w in lowered for w in ("my booking", "my appointment", "حجوزاتي", "مواعيدي")):
+            return "action", "list_bookings"
+        if any(w in lowered for w in booking_words):
             return "action", "book"
         if any(w in lowered for w in ("doctor", "doctors", "who are", "دكتور", "طبيب", "أطباء", "اطباء")):
             return "action", "list_doctors"
@@ -166,9 +173,19 @@ class ChatbotEngine:
 
     # ----------------------------------------------------------------- action
 
-    def action_node(self, state: ChatState) -> dict[str, Any]:
+    def action_node(self, state: ChatState, config: dict | None = None) -> dict[str, Any]:
         language = state.get("language", "en")
         action = state.get("action", "book")
+        thread_id = ((config or {}).get("configurable") or {}).get("thread_id", "default")
+
+        # Booking-record actions are fully deterministic (no slots needed).
+        if action == "list_bookings":
+            return self._reply(self._list_bookings_response(thread_id, language))
+        if action == "cancel_booking":
+            return self._reply(
+                self._cancel_booking_response(thread_id, self._last_user_message(state), language)
+            )
+
         slots = self._extract_slots(state)
         log.info("slot extraction: %s", slots)
 
@@ -194,7 +211,7 @@ class ChatbotEngine:
             return self._reply(self._list_specializations_response(branch, language))
         if action == "list_doctors":
             return self._reply(self._list_doctors_response(specialization, branch, language))
-        return self._reply(self._booking_response(slots, specialization, branch, language))
+        return self._reply(self._booking_response(slots, specialization, branch, language, thread_id))
 
     def _extract_slots(self, state: ChatState) -> dict[str, Any]:
         try:
@@ -250,6 +267,7 @@ class ChatbotEngine:
         specialization: dict | None,
         branch: dict | None,
         language: str,
+        thread_id: str = "default",
     ) -> dict[str, Any]:
         """Verified booking payload, or a clarification question when the
         conversation doesn't yet pin down one real doctor."""
@@ -282,7 +300,7 @@ class ChatbotEngine:
             )
             if doctor:
                 log.info("doctor resolved: %r -> %s (%s)", doctor_query, doctor["name_en"], doctor["id"])
-                return self._verified_booking(doctor)
+                return self._verified_booking(doctor, thread_id)
             if candidates:  # ambiguous mention — never guess a doctor
                 log.info("doctor mention ambiguous: %r -> %d candidates, asking user to clarify", doctor_query, len(candidates))
                 return {"answer": self._ask_choose_doctor(candidates, language)}
@@ -298,17 +316,22 @@ class ChatbotEngine:
         if specialization and pool:
             if len(pool) == 1:
                 log.info("single doctor matches specialty %s -> auto-resolved: %s", specialization["name_en"], pool[0]["name_en"])
-                return self._verified_booking(pool[0])
+                return self._verified_booking(pool[0], thread_id)
             log.info("%d doctors match specialty %s -> asking user to choose", len(pool), specialization["name_en"])
             return {"answer": self._ask_choose_doctor(pool, language)}
         if language == "ar":
             return {"answer": "يسعدني مساعدتك في حجز موعد. مع أي تخصص أو طبيب تود الحجز؟ يمكنك أيضاً وصف الأعراض وسأرشح لك التخصص المناسب."}
         return {"answer": "I'd be happy to book an appointment for you. Which specialty or doctor would you like? You can also describe your symptoms and I'll suggest the right specialty."}
 
-    def _verified_booking(self, doctor: dict[str, Any]) -> dict[str, Any]:
+    def _verified_booking(self, doctor: dict[str, Any], thread_id: str) -> dict[str, Any]:
         branch = self.repo.get_branch(doctor["branch_id"])
+        appointment = self.repo.create_appointment(thread_id, doctor["id"])
+        log.info("appointment saved: %s (%s, thread=%s)", appointment["id"], doctor["name_en"], thread_id)
         return {
             "action": "book_appointment",
+            "appointment_id": appointment["id"],
+            "status": appointment["status"],
+            "created_at": appointment["created_at"],
             "doctor_id": doctor["id"],
             "doctor_name": doctor["name_en"],
             "doctor_name_ar": doctor["name_ar"],
@@ -317,6 +340,66 @@ class ChatbotEngine:
             "branch": branch["name_en"],
             "branch_id": branch["id"],
             "hospital": self.repo.hospital_label(branch),
+        }
+
+    # -------------------------------------------- booking records (CRUD-lite)
+
+    _APPOINTMENT_ID = re.compile(r"APT-[0-9A-Fa-f]{6}")
+
+    def _appointment_view(self, a: dict[str, Any], language: str) -> dict[str, Any]:
+        ar = language == "ar"
+        return {
+            "appointment_id": a["id"],
+            "status": a["status"],
+            "doctor": a["doctor_ar"] if ar else a["doctor_en"],
+            "specialty": a["specialty_ar"] if ar else a["specialty_en"],
+            "branch": a["branch_ar"] if ar else a["branch_en"],
+            "created_at": a["created_at"],
+        }
+
+    def _list_bookings_response(self, thread_id: str, language: str) -> dict[str, Any]:
+        appointments = self.repo.list_appointments(thread_id)
+        log.info("list bookings: thread=%s -> %d record(s)", thread_id, len(appointments))
+        if not appointments:
+            if language == "ar":
+                return {"answer": "لا توجد لديك حجوزات حتى الآن في هذه المحادثة. هل تودّ حجز موعد؟ يمكنك وصف الأعراض وسأرشح لك التخصص المناسب."}
+            return {"answer": "You don't have any bookings yet in this conversation. Would you like to book an appointment? You can describe your symptoms and I'll suggest the right specialty."}
+        return {
+            "action": "list_bookings",
+            "appointments": [self._appointment_view(a, language) for a in appointments],
+        }
+
+    def _cancel_booking_response(self, thread_id: str, user_message: str, language: str) -> dict[str, Any]:
+        appointments = self.repo.list_appointments(thread_id)
+        active = [a for a in appointments if a["status"] == "confirmed"]
+        mentioned = self._APPOINTMENT_ID.search(user_message or "")
+
+        target = None
+        if mentioned:
+            wanted = mentioned.group(0).upper()
+            target = next((a for a in active if a["id"] == wanted), None)
+            if target is None:
+                if language == "ar":
+                    return {"answer": f"لم أجد حجزاً نشطاً بالرقم {wanted} في هذه المحادثة."}
+                return {"answer": f"I couldn't find an active booking with reference {wanted} in this conversation."}
+        elif len(active) == 1:
+            target = active[0]
+        elif not active:
+            if language == "ar":
+                return {"answer": "لا توجد لديك حجوزات نشطة لإلغائها."}
+            return {"answer": "You have no active bookings to cancel."}
+        else:
+            options = "؛ ".join(f"{a['id']} ({a['doctor_ar']})" for a in active) if language == "ar" \
+                else "; ".join(f"{a['id']} ({a['doctor_en']})" for a in active)
+            if language == "ar":
+                return {"answer": f"لديك أكثر من حجز نشط: {options}. أي حجز تودّ إلغاءه؟ اذكر رقم الحجز."}
+            return {"answer": f"You have more than one active booking: {options}. Which one would you like to cancel? Please give the booking reference."}
+
+        cancelled = self.repo.cancel_appointment(target["id"])
+        log.info("appointment cancelled: %s (thread=%s)", target["id"], thread_id)
+        return {
+            "action": "cancel_booking",
+            **self._appointment_view(cancelled, language),
         }
 
     @staticmethod

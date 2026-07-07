@@ -18,10 +18,11 @@ Intents:
     - "list_doctors": ask which doctors are available (optionally by specialty/branch)
     - "list_specializations": ask which specializations/departments a branch offers
     - "list_branches": ask which branches/locations exist
+    - "list_bookings": ask about their OWN existing bookings ("list my bookings",
+      "what are my appointments?", "ما هي حجوزاتي؟", "متى موعدي؟")
+    - "cancel_booking": cancel an existing booking ("cancel my appointment",
+      "الغي الحجز", possibly with a reference like APT-3F2A1B)
 - "other": greetings, thanks, questions about the hospital identity, anything else.
-    Also "other": questions about the user's OWN existing appointments/bookings
-    ("list my bookings", "متى موعدي؟") — the assistant creates new booking
-    requests but has no access to existing appointment records.
 
 IMPORTANT: If the assistant just offered to book an appointment and the user
 replies affirmatively ("yes", "ok", "نعم", "اه احجزلي", "تمام"), that is
@@ -34,7 +35,7 @@ symptoms or health questions.
 Users may write in Arabic or English.
 
 Respond with ONLY a JSON object:
-{"intent": "medical" | "action" | "other", "action": "book" | "list_doctors" | "list_specializations" | "list_branches" | "none"}"""
+{"intent": "medical" | "action" | "other", "action": "book" | "list_doctors" | "list_specializations" | "list_branches" | "list_bookings" | "cancel_booking" | "none"}"""
 
 
 EXTRACT_SYSTEM = """You extract booking/lookup parameters from a hospital chatbot conversation.
@@ -87,8 +88,4 @@ with branches in {branches}.
 Reply ONLY in {language}, in 1-3 warm conversational sentences.
 If greeted, greet back, introduce the hospital briefly, and invite the user to
 describe their symptoms or ask about our doctors, specializations, and branches.
-If asked about their existing appointments/bookings, explain honestly that you
-can request new bookings but cannot view existing appointment records — for
-those, they should contact the branch reception; offer to book a new
-appointment or answer other questions.
 Plain text only — no JSON, no markdown."""

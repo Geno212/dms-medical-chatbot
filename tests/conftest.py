@@ -1,10 +1,14 @@
 import json
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Tests must not leave durable conversation checkpoints behind.
+os.environ.setdefault("CHECKPOINT_DB", ":memory:")
 
 from app.config import get_config
 from app.db import Repository
@@ -41,4 +45,7 @@ def repo():
         seed(skip_embeddings=True)
     repository = Repository(config.db_path)
     yield repository
+    # Booking tests write real rows; scrub anything test threads created.
+    repository.conn().execute("DELETE FROM appointments WHERE thread_id LIKE 'test-%'")
+    repository.conn().commit()
     repository.close()

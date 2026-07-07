@@ -1,10 +1,12 @@
 # Core engine
 langgraph>=0.5
+langgraph-checkpoint-sqlite~=2.0.10   # durable conversation memory (data/conversations.db)
 openai>=1.90            # OpenAI-compatible client (works with Ollama, LM Studio, Groq, OpenAI)
 numpy>=1.26
 
-# UI
+# UI (chat history persistence uses chainlit's SQLAlchemy data layer + aiosqlite)
 chainlit>=2.9
+aiosqlite>=0.20
 
 # Supabase / PostgreSQL backend (used when DATABASE_URL is set)
 psycopg2-binary>=2.9

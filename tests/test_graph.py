@@ -11,7 +11,7 @@ from app.graph.nodes import detect_language
 
 def run_graph(repo, llm):
     graph = build_graph(repo=repo, llm=llm)
-    thread_id = str(uuid.uuid4())
+    thread_id = "test-" + str(uuid.uuid4())  # prefix lets conftest scrub booking rows
     return graph, thread_id
 
 

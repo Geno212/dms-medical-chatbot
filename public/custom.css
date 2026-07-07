@@ -1,0 +1,39 @@
+/* Al-Mashreq Medical Group — UI refinements on top of theme.json.
+   Kept deliberately surgical: token-level theming lives in theme.json;
+   this file only handles what tokens can't express. */
+
+/* Bilingual chat: render each paragraph in its own script direction, so
+   Arabic messages read right-to-left while English stays left-to-right,
+   without any per-message configuration. */
+.prose p,
+.prose li,
+[data-step-type="user_message"] p,
+[data-step-type="assistant_message"] p {
+  unicode-bidi: plaintext;
+}
+
+/* Structured payloads (the JSON under action confirmations) read as a
+   calm technical artifact: bordered, slightly inset, mono. */
+.prose pre,
+pre {
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--muted) / 0.55);
+}
+
+/* Slightly larger, calmer line rhythm for medical guidance text. */
+.prose {
+  line-height: 1.7;
+}
+
+/* Keep list markers on the correct side when a list is Arabic. */
+.prose ul,
+.prose ol {
+  unicode-bidi: plaintext;
+}
+
+/* Assistant name in the header: a touch more presence, no shouting. */
+#header .text-lg,
+#header [class*="font-semibold"] {
+  letter-spacing: 0.01em;
+}

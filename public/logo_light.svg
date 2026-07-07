@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="236" height="44" viewBox="0 0 236 44">
+  <rect x="2" y="2" width="40" height="40" rx="11" fill="#147065"/>
+  <rect x="18.5" y="10" width="7" height="24" rx="3.5" fill="#F3FBF9"/>
+  <rect x="10" y="18.5" width="24" height="7" rx="3.5" fill="#F3FBF9"/>
+  <text x="52" y="24" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="17" font-weight="650" fill="#123239">Al-Mashreq</text>
+  <text x="52" y="38" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10" font-weight="500" letter-spacing="2.2" fill="#3E6B66">MEDICAL GROUP</text>
+</svg>

@@ -85,14 +85,20 @@ Every reply is one of two disjoint shapes (per the task spec):
 ```jsonc
 { "answer": "conversational medical text, in the user's language" }
 // or
-{ "action": "book_appointment" | "list_doctors" | "list_specializations" | "list_branches", ... }
+{ "action": "book_appointment" | "list_doctors" | "list_specializations"
+          | "list_branches" | "list_bookings" | "cancel_booking", ... }
 ```
 
-Booking example (all values verified against the DB):
+Booking example (all values verified against the DB; the booking is a real
+`appointments` row, not just a payload — `list_bookings` / `cancel_booking`
+operate on it later, scoped to the conversation thread):
 
 ```json
 {
   "action": "book_appointment",
+  "appointment_id": "APT-3F2A1B",
+  "status": "confirmed",
+  "created_at": "2026-07-07 13:00 UTC",
   "doctor_id": "DOC-001",
   "doctor_name": "Dr. Sarah Hassan",
   "doctor_name_ar": "د. سارة حسن",
@@ -106,6 +112,12 @@ Booking example (all values verified against the DB):
 
 Voice input produces `{ "transcribed_text": "..." }`, then the text is processed
 as a regular message. See [examples/](examples/) for full transcripts.
+
+**Presentation vs. contract:** the graph's response stays strictly one of the
+two shapes above. In the web UI, action payloads are additionally rendered
+with a human-readable bilingual confirmation *derived deterministically from
+the payload* (`app/presenter.py` — no LLM call, so the text can never
+contradict the data), with the raw JSON shown underneath.
 
 ## 3. Prompt design strategy
 
@@ -144,12 +156,29 @@ cp .env.example .env
 # 4. Seed the database (computes protocol embeddings via the endpoint)
 python scripts/seed_db.py
 
-# 5a. Web UI (mic button enabled)
+# 5a. Web UI (mic button enabled) — log in with demo / demo
 chainlit run app/chainlit_app.py -w
 
 # 5b. or terminal chat
 python -m app.cli
 ```
+
+The web UI requires a login (default `demo` / `demo`, configurable via
+`CHAT_USER` / `CHAT_PASSWORD`; set `CHAINLIT_AUTH_SECRET` in `.env`). The
+login is what lets conversations persist: past chats appear in the sidebar
+and can be resumed with full context.
+
+**Persistence (survives restarts):**
+
+| What | Where | Layer |
+|---|---|---|
+| Chat history (sidebar, resume) | `data/chainlit.db` | Chainlit SQLAlchemy data layer |
+| Conversation memory (transcript window + clinical slot-filling context) | `data/conversations.db` | LangGraph SQLite checkpointer |
+| Bookings (`APT-…` records) | `appointments` table (SQLite or Supabase) | Repository |
+
+One thread id ties all three together: resuming a chat from the sidebar
+restores both the visible history and the graph's memory, and the bookings
+made in that conversation remain listable/cancellable.
 
 No Ollama? Point `.env` at any OpenAI-compatible endpoint (LM Studio, Groq,
 OpenAI) — see `.env.example`. No embedding model? `seed_db.py --skip-embeddings`
@@ -168,13 +197,14 @@ audio file; in the CLI use `/voice path/to/audio.wav`.
 ## 5. Tests
 
 ```bash
-python -m pytest tests/ -q     # 33 tests
+python -m pytest tests/ -q     # 42 tests
 ```
 
 The suite injects a scripted fake LLM, so the full pipeline — routing,
 retrieval grounding, bilingual entity resolution, multi-turn slot-filling,
-verified payload construction, ambiguity refusal, heuristic fallback — is
-tested deterministically without a model server.
+verified payload construction, booking lifecycle (create/list/cancel),
+ambiguity refusal, heuristic fallback — is tested deterministically without
+a model server.
 
 ## 5b. Pipeline logging (observability)
 

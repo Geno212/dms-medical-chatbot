@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .env
 data/hospital.db
+data/chainlit.db*
+data/conversations.db*
 .chainlit/translations/
 .files/
 .pytest_cache/

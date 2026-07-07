@@ -19,16 +19,36 @@ across turns of the same session.
 
 from __future__ import annotations
 
+import sqlite3
+
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from ..config import Config, get_config
 from ..db import Repository, get_repository
 from ..llm import ChatLLM, EmbeddingClient, OpenAICompatLLM
-from ..logging_setup import configure_logging
+from ..logging_setup import configure_logging, get_logger
 from ..vectorstore import ProtocolRetriever
 from .nodes import ChatbotEngine
 from .state import ChatState
+
+log = get_logger()
+
+
+def _make_checkpointer(config: Config):
+    """Durable conversation memory: LangGraph state (transcript + clinical
+    context) is checkpointed to SQLite, so a chat thread picks up exactly
+    where it left off even across process restarts. Falls back to in-memory
+    checkpoints if the sqlite checkpointer isn't installed."""
+    if config.checkpoint_db == ":memory:":
+        return MemorySaver()
+    try:
+        from langgraph.checkpoint.sqlite import SqliteSaver
+    except ImportError:
+        log.warning("langgraph-checkpoint-sqlite not installed -> conversations are in-memory only")
+        return MemorySaver()
+    conn = sqlite3.connect(config.checkpoint_db, check_same_thread=False)
+    return SqliteSaver(conn)
 
 
 def build_graph(
@@ -61,7 +81,7 @@ def build_graph(
     graph.add_edge("action", END)
     graph.add_edge("other", END)
 
-    return graph.compile(checkpointer=MemorySaver())
+    return graph.compile(checkpointer=_make_checkpointer(config))
 
 
 def chat_turn(compiled_graph, thread_id: str, user_message: str) -> dict:

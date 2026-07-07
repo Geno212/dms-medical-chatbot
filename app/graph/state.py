@@ -14,7 +14,7 @@ class ChatState(TypedDict, total=False):
     # Per-turn routing metadata (overwritten every turn).
     language: str  # "ar" | "en"
     intent: str    # "medical" | "action" | "other"
-    action: str    # "book" | "list_doctors" | "list_specializations" | "list_branches" | "none"
+    action: str    # "book" | "list_doctors" | "list_specializations" | "list_branches" | "list_bookings" | "cancel_booking" | "none"
 
     # Clinical context that outlives a single turn: what the patient described
     # and which specialty the knowledge base pointed to. This is what lets

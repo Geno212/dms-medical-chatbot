@@ -53,6 +53,10 @@ class Config:
         "DB_BACKEND", "postgres" if (os.getenv("APP_DATABASE_URL") or os.getenv("DATABASE_URL")) else "sqlite"))
     db_path: Path = field(default_factory=lambda: Path(os.getenv("DB_PATH", str(PROJECT_ROOT / "data" / "hospital.db"))))
     dataset_path: Path = field(default_factory=lambda: Path(os.getenv("DATASET_PATH", str(PROJECT_ROOT / "data" / "hospital_dataset.json"))))
+    # Conversation state (LangGraph checkpoints) survives restarts here.
+    # Set CHECKPOINT_DB=:memory: for ephemeral conversations (tests use this).
+    checkpoint_db: str = field(default_factory=lambda: os.getenv(
+        "CHECKPOINT_DB", str(PROJECT_ROOT / "data" / "conversations.db")))
 
     # --- Speech to text ---
     whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "small"))

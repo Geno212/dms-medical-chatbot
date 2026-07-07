@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -59,7 +61,36 @@ CREATE TABLE IF NOT EXISTS protocols (
     content_ar TEXT NOT NULL,
     embedding BLOB
 );
+
+CREATE TABLE IF NOT EXISTS appointments (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    doctor_id TEXT NOT NULL REFERENCES doctors(id),
+    status TEXT NOT NULL DEFAULT 'confirmed',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_appointments_thread ON appointments(thread_id);
 """
+
+# The write-path joined view of one appointment, shared by all reads.
+_APPOINTMENT_SELECT = """
+SELECT a.id, a.thread_id, a.status, a.created_at,
+       d.id AS doctor_id, d.name_en AS doctor_en, d.name_ar AS doctor_ar,
+       s.id AS specialization_id, s.name_en AS specialty_en, s.name_ar AS specialty_ar,
+       b.id AS branch_id, b.name_en AS branch_en, b.name_ar AS branch_ar
+FROM appointments a
+JOIN doctors d ON d.id = a.doctor_id
+JOIN specializations s ON s.id = d.specialization_id
+JOIN branches b ON b.id = d.branch_id
+"""
+
+
+def new_appointment_id() -> str:
+    return "APT-" + uuid.uuid4().hex[:6].upper()
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -77,6 +108,12 @@ class Repository:
         self.db_path = str(db_path)
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # Bookings arrived after the original schema: make sure the table
+        # exists on databases seeded before it was introduced.
+        self._conn.executescript(
+            SCHEMA[SCHEMA.index("CREATE TABLE IF NOT EXISTS appointments"):]
+        )
+        self._conn.commit()
 
     # ---------- setup ----------
 
@@ -155,6 +192,42 @@ class Repository:
                FROM protocols p JOIN specializations s ON s.id = p.specialization_id"""
         ).fetchall()
         return [_row_to_dict(r) for r in rows]
+
+    # ---------- appointments (the booking write-path) ----------
+
+    def create_appointment(self, thread_id: str, doctor_id: str) -> dict[str, Any]:
+        appointment_id = new_appointment_id()
+        self._conn.execute(
+            "INSERT INTO appointments (id, thread_id, doctor_id, status, created_at) VALUES (?, ?, ?, 'confirmed', ?)",
+            (appointment_id, thread_id, doctor_id, utc_now()),
+        )
+        self._conn.commit()
+        return self.get_appointment(appointment_id)
+
+    def get_appointment(self, appointment_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            _APPOINTMENT_SELECT + " WHERE a.id = ?", (appointment_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_appointments(self, thread_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            _APPOINTMENT_SELECT + " WHERE a.thread_id = ? ORDER BY a.created_at",
+            (thread_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def cancel_appointment(self, appointment_id: str) -> dict[str, Any] | None:
+        """Cancel a confirmed appointment; returns the updated record, or
+        None when it doesn't exist / is already cancelled."""
+        cursor = self._conn.execute(
+            "UPDATE appointments SET status = 'cancelled' WHERE id = ? AND status = 'confirmed'",
+            (appointment_id,),
+        )
+        self._conn.commit()
+        if cursor.rowcount == 0:
+            return None
+        return self.get_appointment(appointment_id)
 
     # ---------- seeding ----------
 

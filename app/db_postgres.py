@@ -67,6 +67,28 @@ CREATE TABLE IF NOT EXISTS protocols (
 );
 """
 
+APPOINTMENTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS appointments (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    doctor_id TEXT NOT NULL REFERENCES doctors(id),
+    status TEXT NOT NULL DEFAULT 'confirmed',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_appointments_thread ON appointments(thread_id);
+"""
+
+_APPOINTMENT_SELECT = """
+SELECT a.id, a.thread_id, a.status, a.created_at,
+       d.id AS doctor_id, d.name_en AS doctor_en, d.name_ar AS doctor_ar,
+       s.id AS specialization_id, s.name_en AS specialty_en, s.name_ar AS specialty_ar,
+       b.id AS branch_id, b.name_en AS branch_en, b.name_ar AS branch_ar
+FROM appointments a
+JOIN doctors d ON d.id = a.doctor_id
+JOIN specializations s ON s.id = d.specialization_id
+JOIN branches b ON b.id = d.branch_id
+"""
+
 
 def _vector_literal(blob: bytes | None) -> str | None:
     if blob is None:
@@ -96,6 +118,14 @@ class PostgresRepository:
         self._conn = psycopg2.connect(database_url)
         self._conn.autocommit = False
         self._dict_cursor = psycopg2.extras.RealDictCursor
+        # Bookings arrived after the original schema: ensure the table exists.
+        # A restricted role may lack CREATE (table then ships via migration).
+        try:
+            with self._conn.cursor() as cur:
+                cur.execute(APPOINTMENTS_SCHEMA)
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
 
     def _query(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
         with self._conn.cursor(cursor_factory=self._dict_cursor) as cur:
@@ -179,6 +209,42 @@ class PostgresRepository:
         for row in rows:
             row["embedding"] = _vector_to_blob(row["embedding"])
         return rows
+
+    # ---------- appointments (the booking write-path) ----------
+
+    def create_appointment(self, thread_id: str, doctor_id: str) -> dict[str, Any]:
+        from .db import new_appointment_id, utc_now
+
+        appointment_id = new_appointment_id()
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO appointments (id, thread_id, doctor_id, status, created_at) VALUES (%s, %s, %s, 'confirmed', %s)",
+                (appointment_id, thread_id, doctor_id, utc_now()),
+            )
+        self._conn.commit()
+        return self.get_appointment(appointment_id)
+
+    def get_appointment(self, appointment_id: str) -> dict[str, Any] | None:
+        rows = self._query(_APPOINTMENT_SELECT + " WHERE a.id = %s", (appointment_id,))
+        return rows[0] if rows else None
+
+    def list_appointments(self, thread_id: str) -> list[dict[str, Any]]:
+        return self._query(
+            _APPOINTMENT_SELECT + " WHERE a.thread_id = %s ORDER BY a.created_at",
+            (thread_id,),
+        )
+
+    def cancel_appointment(self, appointment_id: str) -> dict[str, Any] | None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "UPDATE appointments SET status = 'cancelled' WHERE id = %s AND status = 'confirmed'",
+                (appointment_id,),
+            )
+            updated = cur.rowcount
+        self._conn.commit()
+        if not updated:
+            return None
+        return self.get_appointment(appointment_id)
 
     # ---------- seeding ----------
 
