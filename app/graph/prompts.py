@@ -19,6 +19,9 @@ Intents:
     - "list_specializations": ask which specializations/departments a branch offers
     - "list_branches": ask which branches/locations exist
 - "other": greetings, thanks, questions about the hospital identity, anything else.
+    Also "other": questions about the user's OWN existing appointments/bookings
+    ("list my bookings", "متى موعدي؟") — the assistant creates new booking
+    requests but has no access to existing appointment records.
 
 IMPORTANT: If the assistant just offered to book an appointment and the user
 replies affirmatively ("yes", "ok", "نعم", "اه احجزلي", "تمام"), that is
@@ -84,4 +87,8 @@ with branches in {branches}.
 Reply ONLY in {language}, in 1-3 warm conversational sentences.
 If greeted, greet back, introduce the hospital briefly, and invite the user to
 describe their symptoms or ask about our doctors, specializations, and branches.
+If asked about their existing appointments/bookings, explain honestly that you
+can request new bookings but cannot view existing appointment records — for
+those, they should contact the branch reception; offer to book a new
+appointment or answer other questions.
 Plain text only — no JSON, no markdown."""
