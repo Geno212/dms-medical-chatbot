@@ -44,6 +44,15 @@ SCENARIOS = {
             "ما هي فروع المستشفى؟",
         ],
     },
+    "05_booking_management.md": {
+        "title": "Managing bookings: book, list, cancel (persisted records)",
+        "turns": [
+            "I want to book an appointment with Dr. Khalid Al-Mansouri",
+            "Show me my bookings",
+            "Please cancel my booking",
+            "Show me my bookings again",
+        ],
+    },
 }
 
 

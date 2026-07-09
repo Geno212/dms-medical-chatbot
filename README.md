@@ -168,17 +168,22 @@ The web UI requires a login (default `demo` / `demo`, configurable via
 login is what lets conversations persist: past chats appear in the sidebar
 and can be resumed with full context.
 
-**Persistence (survives restarts):**
+**Persistence (survives restarts) — every layer follows the same backend
+switch.** With the default SQLite backend everything is local; with
+`DB_BACKEND=postgres` (i.e. `APP_DATABASE_URL` set) **all saving happens in
+Supabase**:
 
-| What | Where | Layer |
-|---|---|---|
-| Chat history (sidebar, resume) | `data/chainlit.db` | Chainlit SQLAlchemy data layer |
-| Conversation memory (transcript window + clinical slot-filling context) | `data/conversations.db` | LangGraph SQLite checkpointer |
-| Bookings (`APT-…` records) | `appointments` table (SQLite or Supabase) | Repository |
+| What | SQLite backend (default) | Postgres backend (Supabase) | Layer |
+|---|---|---|---|
+| Chat history (sidebar, resume) | `data/chainlit.db` | `threads`/`steps`/… tables | Chainlit SQLAlchemy data layer (asyncpg) |
+| Conversation memory (transcript + clinical slot-filling context) | `data/conversations.db` | `checkpoints` tables | LangGraph checkpointer (SqliteSaver / PostgresSaver) |
+| Bookings (`APT-…` records) | `appointments` table | `appointments` table | Repository |
 
 One thread id ties all three together: resuming a chat from the sidebar
 restores both the visible history and the graph's memory, and the bookings
-made in that conversation remain listable/cancellable.
+made in that conversation remain listable/cancellable. Checkpointing degrades
+gracefully (Postgres → SQLite → in-memory) so a persistence problem can never
+take the chatbot down.
 
 No Ollama? Point `.env` at any OpenAI-compatible endpoint (LM Studio, Groq,
 OpenAI) — see `.env.example`. No embedding model? `seed_db.py --skip-embeddings`
@@ -253,33 +258,44 @@ DATABASE_URL=postgresql://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.co
 python scripts/seed_db.py
 ```
 
-Everything — graph, matching, retrieval, UI — now runs against Supabase.
-Protocol embeddings are stored in a pgvector `vector` column; at the current
-KB size dense ranking happens in-process, and at scale it moves into SQL
+Everything — graph, matching, retrieval, UI, and **all persistence** (chat
+history, conversation memory checkpoints, bookings) — now runs against
+Supabase; nothing is saved locally on this backend. Protocol embeddings are
+stored in a pgvector `vector` column; at the current KB size dense ranking
+happens in-process, and at scale it moves into SQL
 (`ORDER BY embedding <=> $1`) without touching the interface.
 
 ## 8. Production path
-* **MemorySaver → Postgres checkpointer** for conversation persistence across
-  restarts.
-* Real booking write-path (appointments table + availability), auth, and an
-  evaluation harness (golden conversations asserting routing + payload
-  correctness) are the natural next steps.
+* **SQLite checkpointer → Postgres checkpointer** so conversation memory is
+  shared across multiple app instances (single-instance durability is
+  already in place via `data/conversations.db`).
+* **Availability model** on top of the existing `appointments` table
+  (doctor calendars, slot conflicts — booking currently always succeeds).
+* **Per-patient accounts** instead of the single demo login, so booking
+  history follows the patient across devices (`userIdentifier` is the seam).
+* An **evaluation harness** (golden conversations asserting routing +
+  payload correctness) on top of the deterministic test suite.
 
 ## Project layout
 
 ```
 app/
   config.py          env-driven configuration
-  db.py              SQLite repository (hospital data)
+  db.py              SQLite repository (hospital data + appointments)
+  db_postgres.py     Supabase/PostgreSQL repository (same interface, pgvector)
   matching.py        bilingual fuzzy entity resolution
   vectorstore.py     hybrid retrieval (dense + lexical)
   llm.py             OpenAI-compatible client + robust JSON extraction
+  logging_setup.py   pipeline trace logger (router/slots/resolution/retrieval)
+  presenter.py       deterministic bilingual rendering of action payloads
   stt.py             faster-whisper transcription (lazy, optional)
-  graph/             LangGraph: state, prompts, nodes, wiring
+  graph/             LangGraph: state, prompts, nodes, wiring, checkpointing
   cli.py             terminal chat
-  chainlit_app.py    web UI with mic + audio upload
-data/                dataset JSON + seeded SQLite DB
+  chainlit_app.py    web UI: mic + audio upload, login, persistent history
+public/              UI branding: theme.json, custom.css, logo, favicon
+data/                dataset JSON + seeded SQLite DB (+ runtime: chainlit.db,
+                     conversations.db — gitignored)
 scripts/             seed_db.py, generate_examples.py
-tests/               31 deterministic tests (fake LLM)
+tests/               42 deterministic tests (fake LLM)
 examples/            deliverable conversation transcripts
 ```

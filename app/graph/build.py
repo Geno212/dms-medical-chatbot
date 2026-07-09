@@ -37,11 +37,25 @@ log = get_logger()
 
 def _make_checkpointer(config: Config):
     """Durable conversation memory: LangGraph state (transcript + clinical
-    context) is checkpointed to SQLite, so a chat thread picks up exactly
-    where it left off even across process restarts. Falls back to in-memory
-    checkpoints if the sqlite checkpointer isn't installed."""
+    context) is checkpointed so a chat thread picks up exactly where it left
+    off even across process restarts. The checkpoint store follows the data
+    backend: Supabase/Postgres when DB_BACKEND=postgres, SQLite otherwise.
+    Falls back gracefully (Postgres -> SQLite -> memory) so a checkpointing
+    problem can never take the chatbot down."""
     if config.checkpoint_db == ":memory:":
         return MemorySaver()
+    if config.db_backend == "postgres":
+        try:
+            from psycopg import Connection
+            from langgraph.checkpoint.postgres import PostgresSaver
+
+            conn = Connection.connect(config.database_url, autocommit=True)
+            saver = PostgresSaver(conn)
+            saver.setup()  # idempotent: creates checkpoint tables on first run
+            log.info("conversation checkpoints -> Postgres (same database as hospital data)")
+            return saver
+        except Exception as exc:
+            log.warning("Postgres checkpointer unavailable (%s: %s) -> falling back to SQLite", type(exc).__name__, exc)
     try:
         from langgraph.checkpoint.sqlite import SqliteSaver
     except ImportError:

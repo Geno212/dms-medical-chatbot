@@ -39,6 +39,7 @@ import chainlit as cl
 from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
 from chainlit.types import ThreadDict
 
+from app.config import get_config
 from app.graph.build import build_graph, chat_turn
 from app.graph.nodes import detect_language
 from app.presenter import humanize
@@ -125,7 +126,67 @@ CREATE INDEX IF NOT EXISTS idx_elements_thread ON elements("threadId");
 """
 
 
+# Postgres flavor of the same schema: TEXT[] where chainlit binds Python
+# lists, BOOLEAN/INTEGER where it binds bools/ints, TEXT everywhere else
+# (JSON fields arrive pre-serialized as strings).
+_HISTORY_SCHEMA_PG = """
+CREATE TABLE IF NOT EXISTS users (
+    "id" TEXT PRIMARY KEY,
+    "identifier" TEXT NOT NULL UNIQUE,
+    "metadata" TEXT NOT NULL DEFAULT '{}',
+    "createdAt" TEXT
+);
+CREATE TABLE IF NOT EXISTS threads (
+    "id" TEXT PRIMARY KEY,
+    "createdAt" TEXT,
+    "name" TEXT,
+    "userId" TEXT,
+    "userIdentifier" TEXT,
+    "tags" TEXT[],
+    "metadata" TEXT,
+    "favorite" BOOLEAN DEFAULT FALSE
+);
+CREATE TABLE IF NOT EXISTS steps (
+    "id" TEXT PRIMARY KEY,
+    "name" TEXT, "type" TEXT, "threadId" TEXT, "parentId" TEXT,
+    "command" TEXT, "modes" TEXT,
+    "streaming" BOOLEAN, "waitForAnswer" BOOLEAN, "isError" BOOLEAN,
+    "metadata" TEXT, "tags" TEXT[], "input" TEXT, "output" TEXT,
+    "createdAt" TEXT, "start" TEXT, "end" TEXT, "generation" TEXT,
+    "showInput" TEXT, "defaultOpen" BOOLEAN, "autoCollapse" BOOLEAN,
+    "language" TEXT, "icon" TEXT, "feedback" TEXT
+);
+CREATE TABLE IF NOT EXISTS elements (
+    "id" TEXT PRIMARY KEY,
+    "threadId" TEXT, "type" TEXT, "chainlitKey" TEXT, "path" TEXT,
+    "url" TEXT, "objectKey" TEXT, "name" TEXT, "display" TEXT,
+    "size" TEXT, "language" TEXT, "page" INTEGER, "props" TEXT,
+    "autoPlay" BOOLEAN, "playerConfig" TEXT, "forId" TEXT, "mime" TEXT
+);
+CREATE TABLE IF NOT EXISTS feedbacks (
+    "id" TEXT PRIMARY KEY,
+    "forId" TEXT, "threadId" TEXT, "value" INTEGER, "comment" TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_steps_thread ON steps("threadId");
+CREATE INDEX IF NOT EXISTS idx_elements_thread ON elements("threadId");
+"""
+
+_config = get_config()
+_USE_PG_HISTORY = _config.db_backend == "postgres" and bool(_config.database_url)
+
+
 def _ensure_history_schema() -> None:
+    if _USE_PG_HISTORY:
+        import psycopg2
+
+        conn = psycopg2.connect(_config.database_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(_HISTORY_SCHEMA_PG)
+            conn.commit()
+        finally:
+            conn.close()
+        return
     CHAINLIT_DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(CHAINLIT_DB))
     try:
@@ -138,9 +199,20 @@ def _ensure_history_schema() -> None:
 _ensure_history_schema()
 
 
+def _history_conninfo() -> str:
+    """Chat history follows the data backend: Supabase/Postgres (via the
+    async driver) when DB_BACKEND=postgres, local SQLite otherwise."""
+    if _USE_PG_HISTORY:
+        url = _config.database_url
+        if url.startswith("postgresql://"):
+            url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+        return url
+    return f"sqlite+aiosqlite:///{CHAINLIT_DB.as_posix()}"
+
+
 @cl.data_layer
 def data_layer():
-    return SQLAlchemyDataLayer(conninfo=f"sqlite+aiosqlite:///{CHAINLIT_DB.as_posix()}")
+    return SQLAlchemyDataLayer(conninfo=_history_conninfo())
 
 
 @cl.password_auth_callback
