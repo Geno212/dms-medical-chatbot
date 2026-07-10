@@ -22,6 +22,10 @@ Intents:
       "what are my appointments?", "ما هي حجوزاتي؟", "متى موعدي؟")
     - "cancel_booking": cancel an existing booking ("cancel my appointment",
       "الغي الحجز", possibly with a reference like APT-3F2A1B)
+    - "modify_booking": change/edit/reschedule/move an existing booking — a
+      different branch, doctor, specialty, or time ("edit my booking", "change
+      my appointment to the Cairo branch", "reschedule", "عايز أعدّل حجزي",
+      "غيّر موعدي للفرع التاني")
 - "other": greetings, thanks, questions about the hospital identity, anything else.
 
 IMPORTANT: If the assistant just offered to book an appointment and the user
@@ -35,7 +39,7 @@ symptoms or health questions.
 Users may write in Arabic or English.
 
 Respond with ONLY a JSON object:
-{"intent": "medical" | "action" | "other", "action": "book" | "list_doctors" | "list_specializations" | "list_branches" | "list_bookings" | "cancel_booking" | "none"}"""
+{"intent": "medical" | "action" | "other", "action": "book" | "list_doctors" | "list_specializations" | "list_branches" | "list_bookings" | "cancel_booking" | "modify_booking" | "none"}"""
 
 
 EXTRACT_SYSTEM = """You extract booking/lookup parameters from a hospital chatbot conversation.

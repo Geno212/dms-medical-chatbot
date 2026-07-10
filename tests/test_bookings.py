@@ -118,6 +118,66 @@ def test_heuristic_routing_for_booking_records(repo):
     assert ChatbotEngine._heuristic_route("الغي الحجز من فضلك") == ("action", "cancel_booking")
     assert ChatbotEngine._heuristic_route("اعرض حجوزاتي") == ("action", "list_bookings")
     assert ChatbotEngine._heuristic_route("I want to book an appointment") == ("action", "book")
+    # editing an existing booking is its own action, not a generic "book"
+    assert ChatbotEngine._heuristic_route("edit my appointment to Cairo") == ("action", "modify_booking")
+    assert ChatbotEngine._heuristic_route("change my booking to another branch") == ("action", "modify_booking")
+    assert ChatbotEngine._heuristic_route("عايز أعدّل موعدي") == ("action", "modify_booking")
+
+
+def test_modify_booking_cancels_and_invites_rebook_no_hallucination(repo):
+    """Editing a booking in place is unsupported. The bot must NOT fabricate a
+    reschedule: it cancels the existing booking deterministically and asks the
+    user to rebook. (Regression for the live 'edit to Cairo branch' bug where
+    the medical LLM invented a fake '[Date and Time]' confirmation.)"""
+    llm = FakeLLM(
+        router=[
+            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "modify_booking"},
+        ],
+        slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": "Cairo"},
+    )
+    graph, thread = run_graph(repo, llm)
+    booked = chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology at Cairo")
+    modified = chat_turn(graph, thread, "edit my booking to the Alexandria branch")
+    # A clarification-style answer, never a fabricated booking payload.
+    assert "answer" in modified and "action" not in modified
+    assert booked["appointment_id"] in modified["answer"]
+    # The old booking is really cancelled in the database.
+    assert repo.get_appointment(booked["appointment_id"])["status"] == "cancelled"
+
+
+def test_modify_booking_among_many_requires_reference(repo):
+    llm = FakeLLM(
+        router=[
+            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "modify_booking"},
+        ],
+        slots=[
+            {"doctor_name": "Dr. Sarah", "specialty": None, "branch": None},
+            {"doctor_name": "Dr. Khalid", "specialty": None, "branch": None},
+        ],
+    )
+    graph, thread = run_graph(repo, llm)
+    first = chat_turn(graph, thread, "Book me with Dr. Sarah")
+    chat_turn(graph, thread, "also book me with Dr. Khalid")
+    ambiguous = chat_turn(graph, thread, "edit my booking")
+    assert "answer" in ambiguous  # two active -> must ask, never touch one at random
+    # Neither booking was cancelled by the ambiguous request.
+    assert repo.get_appointment(first["appointment_id"])["status"] == "confirmed"
+
+
+def test_booking_payload_carries_arabic_fields(repo):
+    """Regression: the Arabic booking confirmation showed English specialty and
+    hospital because the payload had no Arabic equivalents."""
+    _, _, response = _book(repo)
+    assert response.get("specialty_ar")
+    assert response.get("hospital_ar")
+    assert response.get("branch_ar")
+    arabic = humanize(response, "ar")
+    # The Arabic render must use the Arabic specialty/location, not English.
+    assert response["specialty_ar"] in arabic
+    assert response["hospital_ar"] in arabic
 
 
 def test_presenter_renders_booking_bilingually(repo):

@@ -65,6 +65,10 @@ class Config:
     # --- Conversation ---
     history_window: int = field(default_factory=lambda: int(os.getenv("HISTORY_WINDOW", "12")))
     retrieval_top_k: int = field(default_factory=lambda: int(os.getenv("RETRIEVAL_TOP_K", "3")))
+    # Minimum retrieval score for an emergency protocol to trigger triage
+    # escalation. A weak hit (an emergency protocol scraping in near a
+    # non-medical message) must NOT force emergency guidance.
+    triage_min_score: float = field(default_factory=lambda: float(os.getenv("TRIAGE_MIN_SCORE", "0.30")))
 
     # --- Logging (pipeline trace: router decisions, slot extraction, entity
     # resolution, retrieval hits — set LOG_LEVEL=WARNING to silence) ---

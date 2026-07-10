@@ -30,8 +30,8 @@ def _booking_ar(p: dict[str, Any]) -> str:
     return (
         f"✅ **تم حجز موعدك بنجاح.**\n\n"
         f"- **الطبيب:** {p.get('doctor_name_ar') or p['doctor_name']}\n"
-        f"- **التخصص:** {p['specialty']}\n"
-        f"- **المكان:** {p['hospital']}\n"
+        f"- **التخصص:** {p.get('specialty_ar') or p['specialty']}\n"
+        f"- **المكان:** {p.get('hospital_ar') or p['hospital']}\n"
         f"- **رقم الحجز:** `{p['appointment_id']}`\n\n"
         f"يمكنك قول \"اعرض حجوزاتي\" أو \"الغِ حجزي\" في أي وقت."
     )

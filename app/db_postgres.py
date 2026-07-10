@@ -150,8 +150,14 @@ class PostgresRepository:
         rows = self._query("SELECT * FROM hospital_group WHERE id = 1")
         return rows[0] if rows else {}
 
-    def hospital_label(self, branch: dict[str, Any] | None = None) -> str:
-        name = self.hospital_group().get("name_en", "")
+    def hospital_label(self, branch: dict[str, Any] | None = None, language: str = "en") -> str:
+        group = self.hospital_group()
+        if language == "ar":
+            name = group.get("name_ar") or group.get("name_en", "")
+            if branch:
+                return f"{name} - فرع {branch['name_ar']}"
+            return name
+        name = group.get("name_en", "")
         if branch:
             return f"{name} - {branch['name_en']} Branch"
         return name

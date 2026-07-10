@@ -29,6 +29,40 @@ def test_medical_question_returns_answer_json(repo):
     assert isinstance(response["answer"], str) and response["answer"]
 
 
+class _PromptCapturingLLM(FakeLLM):
+    """Records the system prompt of the free-text (medical) call so a test can
+    assert whether the triage-emergency note was injected."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.last_medical_system = None
+
+    def chat(self, system, messages, json_mode=False):
+        if "intent router" not in system and "extract booking/lookup" not in system:
+            self.last_medical_system = system
+        return super().chat(system, messages, json_mode=json_mode)
+
+
+def test_triage_escalates_only_on_strong_emergency_match(repo):
+    """Regression: triage escalation must key off a *strong* emergency hit, not
+    any weak one. A real emergency (chest pain + breathing trouble) escalates;
+    a mild, non-emergency message does not — even if an emergency protocol
+    scrapes in at a low score."""
+    from app.graph.prompts import TRIAGE_EMERGENCY_NOTE
+
+    marker = TRIAGE_EMERGENCY_NOTE[:20]
+
+    emergency_llm = _PromptCapturingLLM(router={"intent": "medical", "action": "none"})
+    graph, thread = run_graph(repo, emergency_llm)
+    chat_turn(graph, thread, "عندي ألم شديد في الصدر وضيق في التنفس")
+    assert marker in (emergency_llm.last_medical_system or ""), "strong emergency should escalate"
+
+    mild_llm = _PromptCapturingLLM(router={"intent": "medical", "action": "none"})
+    graph2, thread2 = run_graph(repo, mild_llm)
+    chat_turn(graph2, thread2, "I have a mild dry skin patch on my arm")
+    assert marker not in (mild_llm.last_medical_system or ""), "non-emergency must not escalate"
+
+
 def test_full_booking_request_returns_verified_payload(repo):
     llm = FakeLLM(
         router={"intent": "action", "action": "book"},

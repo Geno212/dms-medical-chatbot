@@ -80,7 +80,8 @@ class ChatbotEngine:
                 intent = parsed["intent"]
             action = parsed.get("action") or "none"
             if action not in ("book", "list_doctors", "list_specializations",
-                              "list_branches", "list_bookings", "cancel_booking"):
+                              "list_branches", "list_bookings", "cancel_booking",
+                              "modify_booking"):
                 action = "none"
         except Exception as exc:
             source = "heuristic-fallback"
@@ -104,9 +105,13 @@ class ChatbotEngine:
         """Keyword fallback so the bot degrades gracefully if the LLM call fails."""
         lowered = text.lower()
         booking_words = ("book", "appointment", "حجز", "احجز", "موعد", "مواعيد")
+        modify_words = ("edit", "change", "modify", "reschedule", "move", "عدل", "عدّل", "غير", "غيّر", "تعديل")
         if any(w in lowered for w in ("cancel", "الغاء", "إلغاء", "الغي", "ألغي")) \
                 and any(w in lowered for w in booking_words):
             return "action", "cancel_booking"
+        if any(w in lowered for w in modify_words) \
+                and any(w in lowered for w in booking_words):
+            return "action", "modify_booking"
         if any(w in lowered for w in ("my booking", "my appointment", "حجوزاتي", "مواعيدي")):
             return "action", "list_bookings"
         if any(w in lowered for w in booking_words):
@@ -144,9 +149,23 @@ class ChatbotEngine:
                 }
                 specialty_name = specialization["name_en"] if language == "en" else specialization["name_ar"]
                 log.info("clinical context updated: suggested_specialization=%s", specialization["name_en"])
-            if any(p["triage"] == "emergency" for p in protocols[:2]):
+            # Escalate only when an emergency protocol matches *strongly*. A
+            # weak emergency hit (e.g. a booking-management message scraping an
+            # emergency protocol at score ~0.20) must not force emergency
+            # guidance — that misfires triage on non-medical turns.
+            emergency = next(
+                (
+                    p for p in protocols[:2]
+                    if p["triage"] == "emergency" and p["score"] >= self.config.triage_min_score
+                ),
+                None,
+            )
+            if emergency:
                 triage_note = prompts.TRIAGE_EMERGENCY_NOTE
-                log.warning("triage escalation: emergency protocol matched for %r", user_message[:80])
+                log.warning(
+                    "triage escalation: emergency protocol %s matched for %r (score=%.4f)",
+                    emergency["id"], user_message[:80], emergency["score"],
+                )
 
         content_key = "content_ar" if language == "ar" else "content_en"
         protocol_text = "\n".join(f"- {p[content_key]}" for p in protocols) or (
@@ -184,6 +203,10 @@ class ChatbotEngine:
         if action == "cancel_booking":
             return self._reply(
                 self._cancel_booking_response(thread_id, self._last_user_message(state), language)
+            )
+        if action == "modify_booking":
+            return self._reply(
+                self._modify_booking_response(thread_id, self._last_user_message(state), language)
             )
 
         slots = self._extract_slots(state)
@@ -336,10 +359,13 @@ class ChatbotEngine:
             "doctor_name": doctor["name_en"],
             "doctor_name_ar": doctor["name_ar"],
             "specialty": doctor["specialty_en"],
+            "specialty_ar": doctor["specialty_ar"],
             "specialty_id": doctor["specialization_id"],
             "branch": branch["name_en"],
+            "branch_ar": branch["name_ar"],
             "branch_id": branch["id"],
             "hospital": self.repo.hospital_label(branch),
+            "hospital_ar": self.repo.hospital_label(branch, language="ar"),
         }
 
     # -------------------------------------------- booking records (CRUD-lite)
@@ -401,6 +427,57 @@ class ChatbotEngine:
             "action": "cancel_booking",
             **self._appointment_view(cancelled, language),
         }
+
+    def _modify_booking_response(self, thread_id: str, user_message: str, language: str) -> dict[str, Any]:
+        """Editing a booking in place (change branch/doctor/time) is not a
+        supported operation — there is no reschedule path in the data layer.
+        Rather than let the model hallucinate a fake reschedule, we do the
+        honest, deterministic thing: cancel the existing booking and invite the
+        user to book again. Reuses the same never-guess target selection as
+        cancellation (an APT reference, or the single active booking, or a
+        clarification prompt when several are active)."""
+        appointments = self.repo.list_appointments(thread_id)
+        active = [a for a in appointments if a["status"] == "confirmed"]
+        mentioned = self._APPOINTMENT_ID.search(user_message or "")
+
+        if not active:
+            if language == "ar":
+                return {"answer": "لا يوجد لديك حجز نشط لتعديله. هل تودّ حجز موعد جديد؟"}
+            return {"answer": "You don't have an active booking to change. Would you like to make a new booking?"}
+
+        target = None
+        if mentioned:
+            wanted = mentioned.group(0).upper()
+            target = next((a for a in active if a["id"] == wanted), None)
+            if target is None:
+                if language == "ar":
+                    return {"answer": f"لم أجد حجزاً نشطاً بالرقم {wanted} في هذه المحادثة."}
+                return {"answer": f"I couldn't find an active booking with reference {wanted} in this conversation."}
+        elif len(active) == 1:
+            target = active[0]
+        else:
+            options = "؛ ".join(f"{a['id']} ({a['doctor_ar']})" for a in active) if language == "ar" \
+                else "; ".join(f"{a['id']} ({a['doctor_en']})" for a in active)
+            if language == "ar":
+                return {"answer": f"لديك أكثر من حجز نشط: {options}. أي حجز تودّ تعديله؟ اذكر رقم الحجز."}
+            return {"answer": f"You have more than one active booking: {options}. Which one would you like to change? Please give the booking reference."}
+
+        cancelled = self.repo.cancel_appointment(target["id"])
+        log.info("booking modify -> cancelled %s for rebooking (thread=%s)", target["id"], thread_id)
+        ref = target["id"]
+        if language == "ar":
+            doctor = target["doctor_ar"]
+            return {"answer": (
+                f"لا يمكنني تعديل حجز قائم في مكانه. لقد ألغيت حجزك الحالي "
+                f"({ref} مع {doctor})، ويمكنك الآن الحجز من جديد بالتخصص أو الطبيب أو الفرع الذي تريده. "
+                f"مع مَن أو في أي فرع تودّ الحجز؟"
+            )}
+        doctor = target["doctor_en"]
+        return {"answer": (
+            f"I can't change a booking in place. I've cancelled your current booking "
+            f"({ref} with {doctor}), and you can book again with whatever doctor, "
+            f"specialty, or branch you'd like. Who or which branch would you like to book with?"
+        )}
 
     @staticmethod
     def _describe(doctor: dict[str, Any], language: str) -> str:

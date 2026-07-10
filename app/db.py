@@ -130,9 +130,14 @@ class Repository:
         row = self._conn.execute("SELECT * FROM hospital_group WHERE id = 1").fetchone()
         return dict(row) if row else {}
 
-    def hospital_label(self, branch: dict[str, Any] | None = None) -> str:
-        """e.g. 'Al-Mashreq Medical Group - Cairo Branch'."""
+    def hospital_label(self, branch: dict[str, Any] | None = None, language: str = "en") -> str:
+        """e.g. 'Al-Mashreq Medical Group - Cairo Branch' (ar: '... - فرع القاهرة')."""
         group = self.hospital_group()
+        if language == "ar":
+            name = group.get("name_ar") or group.get("name_en", "")
+            if branch:
+                return f"{name} - فرع {branch['name_ar']}"
+            return name
         name = group.get("name_en", "")
         if branch:
             return f"{name} - {branch['name_en']} Branch"
