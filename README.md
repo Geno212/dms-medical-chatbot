@@ -9,6 +9,11 @@ JSON** built from the hospital's real data. Voice input is transcribed locally.
 **Privacy-first by design: the LLM, the speech-to-text, and the database all run
 locally. No patient utterance ever leaves the machine.**
 
+**Repository:** https://github.com/Geno212/dms-medical-chatbot
+
+For the full architecture with diagrams, see
+[`docs/SYSTEM_DOCUMENTATION.md`](docs/SYSTEM_DOCUMENTATION.md).
+
 ---
 
 ## 1. Architecture
@@ -252,8 +257,9 @@ same repository interface — no code changes needed:
 ```bash
 # 1. Create a free project at supabase.com
 # 2. Dashboard -> Connect -> Connection String -> copy the Session pooler URI
-# 3. In .env:
-DATABASE_URL=postgresql://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.com:5432/postgres
+# 3. In .env (use APP_DATABASE_URL, not the bare DATABASE_URL — Chainlit's data
+#    layer hijacks DATABASE_URL and exhausts the Supabase session pooler):
+APP_DATABASE_URL=postgresql://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.com:5432/postgres
 # 4. Seed the cloud database (creates schema + pgvector extension automatically)
 python scripts/seed_db.py
 ```
@@ -275,6 +281,37 @@ happens in-process, and at scale it moves into SQL
   history follows the patient across devices (`userIdentifier` is the seam).
 * An **evaluation harness** (golden conversations asserting routing +
   payload correctness) on top of the deterministic test suite.
+
+## 9. Requirements & deliverables coverage
+
+Every task requirement and deliverable maps to something concrete in this repo.
+(Full traceability table with source locations is in
+[`docs/SYSTEM_DOCUMENTATION.md`](docs/SYSTEM_DOCUMENTATION.md) §16–§17.)
+
+**Functional requirements**
+
+| # | Requirement | Met by |
+|---|---|---|
+| 1 | Context-aware, no repetition | Per-thread checkpointing + `clinical` slot-filling context |
+| 1 | Arabic + English | Language detection, bilingual retrieval/matching/prompts/presenter |
+| 2 | Symptom assessment, empathetic, same language | `medical_node` + `MEDICAL_SYSTEM` prompt |
+| 2 | Booking suggestion after every medical answer | Prompt ends each answer with a booking offer |
+| 3 | Grounded in the hospital dataset | Constrained-context hybrid RAG |
+| 4 | Actions vs. medical, never mixed | `router_node`; graph returns pure payload **or** prose |
+| 5 | Look up branches / specializations / doctors | `list_branches` / `list_specializations` / `list_doctors` |
+| 6 | Verified structured booking with IDs | `matching.py` resolution + payload built from DB rows |
+| 7 | Voice input *(optional)* | `stt.py` (faster-whisper) → routed as a normal message |
+
+**Deliverables**
+
+| Deliverable | Location |
+|---|---|
+| Full source code | `app/`, `tests/`, `scripts/` |
+| README (approach, models, prompts, run) | this file, §1–§7 |
+| Hospital test dataset | `data/hospital_dataset.json` (3 branches · 8 specializations · 18 doctors · 14 protocols) |
+| Multi-turn medical → booking example | `examples/01…` (EN), `examples/02…` (AR) |
+| Doctors / specializations lookup example | `examples/03_data_lookups.md` |
+| Voice input example | `examples/04_voice_input.md` |
 
 ## Project layout
 
