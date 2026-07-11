@@ -20,14 +20,53 @@ def test_partial_name_scores_high():
     assert name_score("Dr. John", "Dr. Sarah Hassan") == 0.0
 
 
-def test_resolve_doctor_partial_english(repo):
-    doctor, _ = resolve_doctor("Dr. Sarah", repo.list_doctors())
+def test_resolve_doctor_partial_english_unique_when_specialty_given(repo):
+    # Two "Dr. Sarah Hassan" exist (Neurology + Dermatology). The name alone is
+    # ambiguous; the specialty filter pins it to the neurologist DOC-001.
+    doctor, _ = resolve_doctor("Dr. Sarah", repo.list_doctors(), specialization_id="SP-NEUR")
     assert doctor and doctor["id"] == "DOC-001"
 
 
-def test_resolve_doctor_arabic(repo):
-    doctor, _ = resolve_doctor("د. سارة", repo.list_doctors())
+def test_resolve_doctor_arabic_unique_when_specialty_given(repo):
+    doctor, _ = resolve_doctor("د. سارة", repo.list_doctors(), specialization_id="SP-NEUR")
     assert doctor and doctor["id"] == "DOC-001"
+
+
+def test_resolve_same_name_different_specialty_is_ambiguous(repo):
+    # Edge case: "Dr. Sarah" matches two real people in different specialties.
+    # The resolver must NOT guess — it returns both as candidates.
+    doctor, candidates = resolve_doctor("Dr. Sarah", repo.list_doctors())
+    assert doctor is None
+    ids = {c["id"] for c in candidates}
+    assert {"DOC-001", "DOC-021"} <= ids  # Neurology + Dermatology Sarahs
+
+
+def test_resolve_same_name_pinned_by_specialty(repo):
+    # The same "Dr. Mona Adel" name exists in Cardiology (DOC-006) and
+    # Pediatrics (DOC-020); a specialty disambiguates to exactly one.
+    cardio, _ = resolve_doctor("Dr. Mona", repo.list_doctors(), specialization_id="SP-CARD")
+    assert cardio and cardio["id"] == "DOC-006"
+    pedia, _ = resolve_doctor("Dr. Mona", repo.list_doctors(), specialization_id="SP-PEDI")
+    assert pedia and pedia["id"] == "DOC-020"
+
+
+def test_same_name_same_specialty_needs_branch(repo):
+    # Edge case: two "Dr. Layla Nasser" both in Cardiology, different branches.
+    # Name + specialty is still ambiguous — only the branch disambiguates.
+    docs = repo.list_doctors()
+    match, candidates = resolve_doctor("Dr. Layla", docs, specialization_id="SP-CARD")
+    assert match is None
+    branches = {c["branch_id"] for c in candidates}
+    assert {"BR-CAI", "BR-RUH"} <= branches  # the clarification spans both branches
+
+
+def test_same_name_same_specialty_pinned_by_branch(repo):
+    docs = repo.list_doctors()
+    cairo, _ = resolve_doctor("Dr. Layla", docs, specialization_id="SP-CARD", branch_id="BR-CAI")
+    riyadh, _ = resolve_doctor("Dr. Layla", docs, specialization_id="SP-CARD", branch_id="BR-RUH")
+    assert cairo and cairo["id"] == "DOC-022"
+    assert riyadh and riyadh["id"] == "DOC-004"
+    assert cairo["id"] != riyadh["id"]
 
 
 def test_resolve_doctor_ambiguous_surname(repo):

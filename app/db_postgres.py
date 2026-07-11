@@ -197,6 +197,18 @@ class PostgresRepository:
             params.append(branch_id)
         return self._query(sql + " ORDER BY d.id", tuple(params))
 
+    def get_doctor(self, doctor_id: str) -> dict[str, Any] | None:
+        rows = self._query(
+            """SELECT d.*, s.name_en AS specialty_en, s.name_ar AS specialty_ar,
+                      b.name_en AS branch_en, b.name_ar AS branch_ar
+               FROM doctors d
+               JOIN specializations s ON s.id = d.specialization_id
+               JOIN branches b ON b.id = d.branch_id
+               WHERE d.id = %s""",
+            (doctor_id,),
+        )
+        return rows[0] if rows else None
+
     def get_branch(self, branch_id: str) -> dict[str, Any] | None:
         rows = self._query("SELECT * FROM branches WHERE id = %s", (branch_id,))
         return rows[0] if rows else None
@@ -252,11 +264,27 @@ class PostgresRepository:
             return None
         return self.get_appointment(appointment_id)
 
+    def list_appointments_like(self, thread_prefix: str) -> list[dict[str, Any]]:
+        """Appointments whose thread_id starts with the given prefix (used by
+        the test suite to find and remove only its own rows)."""
+        return self._query(
+            "SELECT * FROM appointments WHERE thread_id LIKE %s ORDER BY created_at",
+            (thread_prefix + "%",),
+        )
+
+    def delete_appointment(self, appointment_id: str) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute("DELETE FROM appointments WHERE id = %s", (appointment_id,))
+        self._conn.commit()
+
     # ---------- seeding ----------
 
     def seed(self, dataset: dict[str, Any], embeddings: list[bytes | None]) -> None:
         self.create_schema()
         with self._conn.cursor() as cur:
+            # Full reset: appointments reference doctors (FK), so clear them
+            # first or the DELETE FROM doctors below raises a FK violation.
+            cur.execute("DELETE FROM appointments")
             cur.execute("DELETE FROM protocols"); cur.execute("DELETE FROM doctors")
             cur.execute("DELETE FROM specializations"); cur.execute("DELETE FROM branches")
             cur.execute("DELETE FROM hospital_group")

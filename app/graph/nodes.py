@@ -65,11 +65,46 @@ class ChatbotEngine:
         content = response.get("answer") or json.dumps(response, ensure_ascii=False)
         return {"response": response, "messages": [{"role": "assistant", "content": content}]}
 
+    def _reply_committing(self, response: dict[str, Any]) -> dict[str, Any]:
+        """A confirmed booking was written -> clear the pending offer."""
+        return {**self._reply(response), "pending_booking": {}}
+
+    def _reply_clearing(self, response: dict[str, Any]) -> dict[str, Any]:
+        """A pending offer was declined/abandoned -> clear it."""
+        return {**self._reply(response), "pending_booking": {}}
+
+    _AFFIRM = ("yes", "yeah", "yep", "sure", "ok", "okay", "confirm", "please do",
+               "go ahead", "نعم", "اه", "أيوه", "ايوه", "تمام", "اكيد", "أكيد",
+               "احجز", "احجزلي", "اوك", "ماشي", "موافق")
+    _DECLINE = ("no", "nope", "cancel", "don't", "dont", "not now", "stop",
+                "لا", "لأ", "مش", "إلغاء", "الغاء", "لا شكرا", "مش عايز")
+
+    @classmethod
+    def _confirm_decision(cls, text: str) -> str:
+        """Classify a reply to a booking-confirmation question as 'yes', 'no',
+        or 'unclear' (a fresh request that discards the pending offer)."""
+        t = (text or "").strip().lower()
+        if any(w in t for w in cls._DECLINE):
+            return "no"
+        if any(t == w or t.startswith(w + " ") or w in t.split() for w in cls._AFFIRM):
+            return "yes"
+        return "unclear"
+
     # ----------------------------------------------------------------- router
 
     def router_node(self, state: ChatState) -> dict[str, Any]:
         user_message = self._last_user_message(state)
         language = detect_language(user_message)
+
+        # If a booking is awaiting confirmation and the user gives a clear
+        # yes/no, route straight to the action path so the confirmation is
+        # honored — even if the router LLM is unavailable (a bare "yes" is not
+        # a booking keyword the heuristic would otherwise catch).
+        if (state.get("pending_booking") or {}).get("doctor_id"):
+            if self._confirm_decision(user_message) in ("yes", "no"):
+                log.info("router: pending booking + %r -> action/book (confirmation)", user_message[:40])
+                return {"intent": "action", "action": "book", "language": language}
+
         intent, action = "medical", "none"
         source = "llm"
         try:
@@ -209,6 +244,27 @@ class ChatbotEngine:
                 self._modify_booking_response(thread_id, self._last_user_message(state), language)
             )
 
+        # A booking already resolved to one doctor may be awaiting the user's
+        # explicit yes/no. Resolve that first so "yes" commits it and "no"
+        # cancels the offer — without re-running slot extraction on an empty
+        # affirmative. Any message that names a *different* doctor/specialty
+        # falls through and re-resolves (the pending offer is discarded).
+        pending = state.get("pending_booking") or {}
+        if pending.get("doctor_id"):
+            decision = self._confirm_decision(self._last_user_message(state))
+            if decision == "yes":
+                doctor = self.repo.get_doctor(pending["doctor_id"])
+                log.info("pending booking confirmed by user -> committing %s", pending["doctor_id"])
+                return self._reply_committing(self._commit_booking(doctor, thread_id))
+            if decision == "no":
+                log.info("pending booking declined by user -> cleared")
+                text = ("تمام، لم أُتمّ الحجز. مع مَن أو في أي تخصص تودّ الحجز؟"
+                        if language == "ar"
+                        else "No problem, I won't book that. Who or which specialty would you like instead?")
+                return self._reply_clearing({"answer": text})
+            # Not a clear yes/no -> treat as a fresh request; discard the offer
+            # and continue to normal resolution below.
+
         slots = self._extract_slots(state)
         log.info("slot extraction: %s", slots)
 
@@ -234,7 +290,8 @@ class ChatbotEngine:
             return self._reply(self._list_specializations_response(branch, language))
         if action == "list_doctors":
             return self._reply(self._list_doctors_response(specialization, branch, language))
-        return self._reply(self._booking_response(slots, specialization, branch, language, thread_id))
+        response, pending = self._booking_response(slots, specialization, branch, language, thread_id)
+        return {**self._reply(response), "pending_booking": pending}
 
     def _extract_slots(self, state: ChatState) -> dict[str, Any]:
         try:
@@ -291,9 +348,11 @@ class ChatbotEngine:
         branch: dict | None,
         language: str,
         thread_id: str = "default",
-    ) -> dict[str, Any]:
-        """Verified booking payload, or a clarification question when the
-        conversation doesn't yet pin down one real doctor."""
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Returns (response, pending_booking). When the conversation pins down
+        exactly one real doctor, the response is a confirmation question and
+        pending_booking holds that doctor (committed on the user's next "yes").
+        Otherwise it's a clarification question and pending_booking is empty."""
         doctors = self.repo.list_doctors()
         doctor_query = slots.get("doctor_name")
 
@@ -323,13 +382,13 @@ class ChatbotEngine:
             )
             if doctor:
                 log.info("doctor resolved: %r -> %s (%s)", doctor_query, doctor["name_en"], doctor["id"])
-                return self._verified_booking(doctor, thread_id)
+                return self._offer_booking(doctor, language)
             if candidates:  # ambiguous mention — never guess a doctor
                 log.info("doctor mention ambiguous: %r -> %d candidates, asking user to clarify", doctor_query, len(candidates))
-                return {"answer": self._ask_choose_doctor(candidates, language)}
+                return {"answer": self._ask_choose_doctor(candidates, language)}, {}
             pool = self.repo.list_doctors(specialization["id"] if specialization else None)
             log.info("doctor not found: %r has no match in database", doctor_query)
-            return {"answer": self._doctor_not_found(doctor_query, pool or doctors, language)}
+            return {"answer": self._doctor_not_found(doctor_query, pool or doctors, language)}, {}
 
         # No doctor named: offer the real options for the (inferred) specialty.
         pool = self.repo.list_doctors(
@@ -338,15 +397,42 @@ class ChatbotEngine:
         )
         if specialization and pool:
             if len(pool) == 1:
-                log.info("single doctor matches specialty %s -> auto-resolved: %s", specialization["name_en"], pool[0]["name_en"])
-                return self._verified_booking(pool[0], thread_id)
+                log.info("single doctor matches specialty %s -> resolved: %s", specialization["name_en"], pool[0]["name_en"])
+                return self._offer_booking(pool[0], language)
             log.info("%d doctors match specialty %s -> asking user to choose", len(pool), specialization["name_en"])
-            return {"answer": self._ask_choose_doctor(pool, language)}
+            return {"answer": self._ask_choose_doctor(pool, language)}, {}
         if language == "ar":
-            return {"answer": "يسعدني مساعدتك في حجز موعد. مع أي تخصص أو طبيب تود الحجز؟ يمكنك أيضاً وصف الأعراض وسأرشح لك التخصص المناسب."}
-        return {"answer": "I'd be happy to book an appointment for you. Which specialty or doctor would you like? You can also describe your symptoms and I'll suggest the right specialty."}
+            return {"answer": "يسعدني مساعدتك في حجز موعد. مع أي تخصص أو طبيب تود الحجز؟ يمكنك أيضاً وصف الأعراض وسأرشح لك التخصص المناسب."}, {}
+        return {"answer": "I'd be happy to book an appointment for you. Which specialty or doctor would you like? You can also describe your symptoms and I'll suggest the right specialty."}, {}
 
-    def _verified_booking(self, doctor: dict[str, Any], thread_id: str) -> dict[str, Any]:
+    def _offer_booking(
+        self, doctor: dict[str, Any], language: str
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Ask the user to confirm the fully-resolved doctor/specialty/branch
+        before anything is written. Nothing hits the database yet; the doctor
+        is stashed in pending_booking so the next 'yes' commits it. This is
+        what makes the identified doctor, specialty, and branch explicit to the
+        user (task requirement 6) instead of booking silently."""
+        branch = self.repo.get_branch(doctor["branch_id"])
+        if language == "ar":
+            answer = (
+                f"سأحجز لك مع {doctor['name_ar']} "
+                f"(تخصص {doctor['specialty_ar']}، فرع {branch['name_ar']}). "
+                f"هل أؤكّد الحجز؟"
+            )
+        else:
+            answer = (
+                f"I'll book you with {doctor['name_en']} "
+                f"({doctor['specialty_en']}, {branch['name_en']} branch). "
+                f"Shall I confirm this booking?"
+            )
+        log.info("offering booking for confirmation: %s (%s)", doctor["name_en"], doctor["id"])
+        return {"answer": answer}, {"doctor_id": doctor["id"]}
+
+    def _commit_booking(self, doctor: dict[str, Any], thread_id: str) -> dict[str, Any]:
+        """Write the confirmed appointment and build the verified payload from
+        database rows only (task requirement 6: doctor/specialty/branch/hospital
+        identifiers, all from real data — the model never produces field values)."""
         branch = self.repo.get_branch(doctor["branch_id"])
         appointment = self.repo.create_appointment(thread_id, doctor["id"])
         log.info("appointment saved: %s (%s, thread=%s)", appointment["id"], doctor["name_en"], thread_id)

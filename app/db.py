@@ -183,6 +183,18 @@ class Repository:
         rows = self._conn.execute(query + " ORDER BY d.id", params).fetchall()
         return [dict(r) for r in rows]
 
+    def get_doctor(self, doctor_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            """SELECT d.*, s.name_en AS specialty_en, s.name_ar AS specialty_ar,
+                      b.name_en AS branch_en, b.name_ar AS branch_ar
+               FROM doctors d
+               JOIN specializations s ON s.id = d.specialization_id
+               JOIN branches b ON b.id = d.branch_id
+               WHERE d.id = ?""",
+            (doctor_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
     def get_branch(self, branch_id: str) -> dict[str, Any] | None:
         row = self._conn.execute("SELECT * FROM branches WHERE id = ?", (branch_id,)).fetchone()
         return _row_to_dict(row) if row else None
@@ -234,12 +246,28 @@ class Repository:
             return None
         return self.get_appointment(appointment_id)
 
+    def list_appointments_like(self, thread_prefix: str) -> list[dict[str, Any]]:
+        """Appointments whose thread_id starts with the given prefix (used by
+        the test suite to find and remove only its own rows)."""
+        rows = self._conn.execute(
+            "SELECT * FROM appointments WHERE thread_id LIKE ? ORDER BY created_at",
+            (thread_prefix + "%",),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_appointment(self, appointment_id: str) -> None:
+        self._conn.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
+        self._conn.commit()
+
     # ---------- seeding ----------
 
     def seed(self, dataset: dict[str, Any], embeddings: list[bytes | None]) -> None:
-        """Replace all hospital data with the dataset contents."""
+        """Replace all hospital data with the dataset contents. This is a full
+        reset: existing appointments are cleared first because they reference
+        doctors that are about to be replaced."""
         self.create_schema()
         conn = self._conn
+        conn.execute("DELETE FROM appointments")
         conn.execute("DELETE FROM protocols"); conn.execute("DELETE FROM doctors")
         conn.execute("DELETE FROM specializations"); conn.execute("DELETE FROM branches")
         conn.execute("DELETE FROM hospital_group")

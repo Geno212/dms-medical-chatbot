@@ -321,6 +321,19 @@ async def on_message(message: cl.Message):
 
 # --- Microphone streaming (Chainlit sends raw PCM16 chunks) ---
 
+def _mic_sample_rate(default: int = 24000) -> int:
+    """Sample rate Chainlit records the microphone at. The location of this
+    setting has moved across Chainlit versions (it used to be reachable via the
+    config module, now it lives on the config *singleton* at
+    config.features.audio.sample_rate). Read it defensively and fall back to
+    Chainlit's own default so a version bump can't break voice input again."""
+    try:
+        from chainlit.config import config as _cl_config
+        return int(_cl_config.features.audio.sample_rate)
+    except Exception:
+        return default
+
+
 @cl.on_audio_start
 async def on_audio_start():
     cl.user_session.set("audio_buffer", io.BytesIO())
@@ -340,7 +353,7 @@ async def on_audio_end():
     cl.user_session.set("audio_buffer", None)
     if buffer is None or buffer.getbuffer().nbytes == 0:
         return
-    sample_rate = cl.config.features.audio.sample_rate
+    sample_rate = _mic_sample_rate()
     wav_io = io.BytesIO()
     with wave.open(wav_io, "wb") as wav:
         wav.setnchannels(1)

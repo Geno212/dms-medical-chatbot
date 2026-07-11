@@ -16,12 +16,18 @@ def run_graph(repo, llm):
 
 
 def _book(repo, thread_extra=""):
+    """Full booking now takes two turns: request -> confirm. The first turn
+    offers the resolved doctor for confirmation; the "yes" turn commits it.
+    The confirm turn is handled by the pending-aware router without an LLM
+    call, so it does NOT consume a router-script entry."""
     llm = FakeLLM(
         router={"intent": "action", "action": "book"},
         slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": "Cairo"},
     )
     graph, thread = run_graph(repo, llm)
-    response = chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology at Cairo")
+    offer = chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology at Cairo")
+    assert "answer" in offer and "action" not in offer  # confirmation prompt, no write yet
+    response = chat_turn(graph, thread, "yes")
     return graph, thread, response
 
 
@@ -40,13 +46,15 @@ def test_booking_creates_persistent_appointment(repo):
 def test_list_bookings_returns_saved_appointments(repo):
     llm = FakeLLM(
         router=[
-            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},        # request (confirm "yes" needs no entry)
             {"intent": "action", "action": "list_bookings"},
         ],
-        slots={"doctor_name": "Dr. Sarah", "specialty": None, "branch": None},
+        # specialty pins the (now duplicated) "Dr. Sarah" name to one person.
+        slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": None},
     )
     graph, thread = run_graph(repo, llm)
-    booked = chat_turn(graph, thread, "Book me with Dr. Sarah")
+    chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology")
+    booked = chat_turn(graph, thread, "yes")
     listed = chat_turn(graph, thread, "list my bookings")
     assert listed["action"] == "list_bookings"
     assert len(listed["appointments"]) == 1
@@ -66,13 +74,14 @@ def test_list_bookings_empty_is_a_friendly_answer(repo):
 def test_cancel_single_booking_without_reference(repo):
     llm = FakeLLM(
         router=[
-            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},        # request (confirm "yes" needs no entry)
             {"intent": "action", "action": "cancel_booking"},
         ],
-        slots={"doctor_name": "Dr. Sarah", "specialty": None, "branch": None},
+        slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": None},
     )
     graph, thread = run_graph(repo, llm)
-    booked = chat_turn(graph, thread, "Book me with Dr. Sarah")
+    chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology")
+    booked = chat_turn(graph, thread, "yes")
     cancelled = chat_turn(graph, thread, "cancel my appointment please")
     assert cancelled["action"] == "cancel_booking"
     assert cancelled["appointment_id"] == booked["appointment_id"]
@@ -83,19 +92,21 @@ def test_cancel_single_booking_without_reference(repo):
 def test_cancel_among_many_requires_then_accepts_reference(repo):
     llm = FakeLLM(
         router=[
-            {"intent": "action", "action": "book"},
-            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},        # request #1 (confirms need no entry)
+            {"intent": "action", "action": "book"},        # request #2
             {"intent": "action", "action": "cancel_booking"},
             {"intent": "action", "action": "cancel_booking"},
         ],
         slots=[
-            {"doctor_name": "Dr. Sarah", "specialty": None, "branch": None},
+            {"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": None},
             {"doctor_name": "Dr. Khalid", "specialty": None, "branch": None},
         ],
     )
     graph, thread = run_graph(repo, llm)
-    first = chat_turn(graph, thread, "Book me with Dr. Sarah")
+    chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology")
+    first = chat_turn(graph, thread, "yes")
     chat_turn(graph, thread, "also book me with Dr. Khalid")
+    chat_turn(graph, thread, "yes")
     ambiguous = chat_turn(graph, thread, "cancel my booking")
     assert "answer" in ambiguous  # two active bookings -> must ask, never guess
     resolved = chat_turn(graph, thread, f"cancel {first['appointment_id']}")
@@ -131,13 +142,14 @@ def test_modify_booking_cancels_and_invites_rebook_no_hallucination(repo):
     the medical LLM invented a fake '[Date and Time]' confirmation.)"""
     llm = FakeLLM(
         router=[
-            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},        # request (confirm "yes" needs no entry)
             {"intent": "action", "action": "modify_booking"},
         ],
         slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": "Cairo"},
     )
     graph, thread = run_graph(repo, llm)
-    booked = chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology at Cairo")
+    chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology at Cairo")
+    booked = chat_turn(graph, thread, "yes")
     modified = chat_turn(graph, thread, "edit my booking to the Alexandria branch")
     # A clarification-style answer, never a fabricated booking payload.
     assert "answer" in modified and "action" not in modified
@@ -149,22 +161,102 @@ def test_modify_booking_cancels_and_invites_rebook_no_hallucination(repo):
 def test_modify_booking_among_many_requires_reference(repo):
     llm = FakeLLM(
         router=[
-            {"intent": "action", "action": "book"},
-            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},        # request #1 (confirms need no entry)
+            {"intent": "action", "action": "book"},        # request #2
             {"intent": "action", "action": "modify_booking"},
         ],
         slots=[
-            {"doctor_name": "Dr. Sarah", "specialty": None, "branch": None},
+            {"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": None},
             {"doctor_name": "Dr. Khalid", "specialty": None, "branch": None},
         ],
     )
     graph, thread = run_graph(repo, llm)
-    first = chat_turn(graph, thread, "Book me with Dr. Sarah")
+    chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology")
+    first = chat_turn(graph, thread, "yes")
     chat_turn(graph, thread, "also book me with Dr. Khalid")
+    chat_turn(graph, thread, "yes")
     ambiguous = chat_turn(graph, thread, "edit my booking")
     assert "answer" in ambiguous  # two active -> must ask, never touch one at random
     # Neither booking was cancelled by the ambiguous request.
     assert repo.get_appointment(first["appointment_id"])["status"] == "confirmed"
+
+
+def test_booking_asks_for_confirmation_before_writing(repo):
+    """Req 6: the resolved doctor/specialty/branch are surfaced for the user to
+    confirm; nothing is written until they say yes."""
+    llm = FakeLLM(
+        router={"intent": "action", "action": "book"},
+        slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": "Cairo"},
+    )
+    graph, thread = run_graph(repo, llm)
+    offer = chat_turn(graph, thread, "book me with Dr. Sarah")
+    assert "answer" in offer and "action" not in offer
+    assert "Dr. Sarah Hassan" in offer["answer"]
+    assert "Neurology" in offer["answer"] and "Cairo" in offer["answer"]
+    # No appointment row exists yet — the offer did not write anything.
+    assert repo.list_appointments(thread) == []
+    committed = chat_turn(graph, thread, "yes")
+    assert committed["action"] == "book_appointment"
+    assert len(repo.list_appointments(thread)) == 1
+
+
+def test_same_name_doctors_trigger_clarification_not_a_guess(repo):
+    """Edge case (seeded on purpose): two real "Dr. Sarah Hassan" exist in
+    different specialties. Naming her without a specialty must produce a
+    clarification listing the real options — never a silent pick, and nothing
+    written."""
+    llm = FakeLLM(
+        router={"intent": "action", "action": "book"},
+        slots={"doctor_name": "Dr. Sarah", "specialty": None, "branch": None},
+    )
+    graph, thread = run_graph(repo, llm)
+    response = chat_turn(graph, thread, "book me with Dr. Sarah")
+    assert "answer" in response and "action" not in response
+    # Mentions both specialties so the user can disambiguate.
+    assert "Neurology" in response["answer"] and "Dermatology" in response["answer"]
+    assert repo.list_appointments(thread) == []  # nothing booked on an ambiguous name
+
+
+def test_branch_disambiguates_same_name_same_specialty(repo):
+    """Edge case: two "Dr. Layla Nasser" in Cardiology (Cairo + Riyadh). Naming
+    her with a specialty is still ambiguous on branch -> the bot lists both
+    branches and asks; supplying the branch resolves to one and offers it."""
+    llm = FakeLLM(
+        router=[
+            {"intent": "action", "action": "book"},   # ambiguous request
+            {"intent": "action", "action": "book"},   # user names the branch -> offer
+        ],
+        slots=[
+            {"doctor_name": "Dr. Layla", "specialty": "Cardiology", "branch": None},
+            {"doctor_name": "Dr. Layla", "specialty": "Cardiology", "branch": "Cairo"},
+        ],
+    )
+    graph, thread = run_graph(repo, llm)
+    ambiguous = chat_turn(graph, thread, "book me with Dr. Layla in cardiology")
+    assert "answer" in ambiguous and "action" not in ambiguous
+    # The clarification distinguishes the two by BRANCH.
+    assert "Cairo" in ambiguous["answer"] and "Riyadh" in ambiguous["answer"]
+    assert repo.list_appointments(thread) == []  # nothing booked while ambiguous
+
+    offer = chat_turn(graph, thread, "the Cairo one")
+    assert "answer" in offer and "action" not in offer  # now a confirmation offer
+    assert "Cairo" in offer["answer"]
+    committed = chat_turn(graph, thread, "yes")
+    assert committed["action"] == "book_appointment"
+    assert committed["doctor_id"] == "DOC-022"  # the Cairo Layla
+    assert committed["branch"] == "Cairo"
+
+
+def test_declining_confirmation_writes_nothing(repo):
+    llm = FakeLLM(
+        router={"intent": "action", "action": "book"},
+        slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": "Cairo"},
+    )
+    graph, thread = run_graph(repo, llm)
+    chat_turn(graph, thread, "book me with Dr. Sarah")
+    declined = chat_turn(graph, thread, "no")
+    assert "answer" in declined and "action" not in declined
+    assert repo.list_appointments(thread) == []  # nothing booked
 
 
 def test_booking_payload_carries_arabic_fields(repo):

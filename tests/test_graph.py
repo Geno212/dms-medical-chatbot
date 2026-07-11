@@ -65,11 +65,17 @@ def test_triage_escalates_only_on_strong_emergency_match(repo):
 
 def test_full_booking_request_returns_verified_payload(repo):
     llm = FakeLLM(
-        router={"intent": "action", "action": "book"},
+        router={"intent": "action", "action": "book"},  # confirm "yes" needs no router entry
         slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": "Cairo"},
     )
     graph, thread = run_graph(repo, llm)
-    response = chat_turn(graph, thread, "I want to book with Dr. Sarah in Neurology at the Cairo branch")
+    offer = chat_turn(graph, thread, "I want to book with Dr. Sarah in Neurology at the Cairo branch")
+    # The resolved doctor/specialty/branch are surfaced for confirmation first
+    # (task req 6: identify from the conversation) — nothing is written yet.
+    assert "answer" in offer and "action" not in offer
+    assert "Dr. Sarah Hassan" in offer["answer"]
+    assert "Neurology" in offer["answer"] and "Cairo" in offer["answer"]
+    response = chat_turn(graph, thread, "yes")
     assert response["action"] == "book_appointment"
     assert response["doctor_id"] == "DOC-001"
     assert response["doctor_name"] == "Dr. Sarah Hassan"
@@ -103,7 +109,7 @@ def test_multi_turn_booking_resolves_after_choice(repo):
         router=[
             {"intent": "medical", "action": "none"},
             {"intent": "action", "action": "book"},
-            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},   # names Dr. Sarah -> offer (confirm needs no entry)
         ],
         slots=[
             {"doctor_name": None, "specialty": None, "branch": None},
@@ -113,7 +119,9 @@ def test_multi_turn_booking_resolves_after_choice(repo):
     graph, thread = run_graph(repo, llm)
     chat_turn(graph, thread, "I've had a severe headache and fever for two days")
     chat_turn(graph, thread, "yes, book me an appointment")
-    final = chat_turn(graph, thread, "Dr. Sarah please")
+    offer = chat_turn(graph, thread, "Dr. Sarah please")
+    assert "answer" in offer and "action" not in offer  # confirmation first
+    final = chat_turn(graph, thread, "yes")
     assert final["action"] == "book_appointment"
     assert final["doctor_id"] == "DOC-001"
     assert final["specialty"] == "Neurology"  # carried from the medical turn
@@ -235,6 +243,10 @@ def test_router_llm_failure_falls_back_to_heuristics(repo):
 
     llm = BrokenRouterLLM(slots={"doctor_name": "Dr. Khalid", "specialty": None, "branch": None})
     graph, thread = run_graph(repo, llm)
-    response = chat_turn(graph, thread, "I want to book an appointment with Dr. Khalid")
+    offer = chat_turn(graph, thread, "I want to book an appointment with Dr. Khalid")
+    assert "answer" in offer  # heuristic routed to book -> confirmation offer
+    # Confirmation works even with the router LLM down: pending-booking + "yes"
+    # is honored directly by the router.
+    response = chat_turn(graph, thread, "yes")
     assert response["action"] == "book_appointment"
     assert response["doctor_id"] == "DOC-003"

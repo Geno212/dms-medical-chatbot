@@ -113,7 +113,12 @@
     { "id": "DOC-015", "name_en": "Dr. Fatima Al-Harbi", "name_ar": "د. فاطمة الحربي", "specialization_id": "SP-INTM", "branch_id": "BR-RUH", "title_en": "Internal Medicine Specialist", "title_ar": "أخصائية الباطنة" },
     { "id": "DOC-016", "name_en": "Dr. Karim Zaki", "name_ar": "د. كريم زكي", "specialization_id": "SP-ENT", "branch_id": "BR-CAI", "title_en": "Consultant ENT Surgeon", "title_ar": "استشاري الأنف والأذن والحنجرة" },
     { "id": "DOC-017", "name_en": "Dr. Dina Sami", "name_ar": "د. دينا سامي", "specialization_id": "SP-GAST", "branch_id": "BR-CAI", "title_en": "Consultant Gastroenterologist", "title_ar": "استشارية الجهاز الهضمي" },
-    { "id": "DOC-018", "name_en": "Dr. Sultan Al-Dossari", "name_ar": "د. سلطان الدوسري", "specialization_id": "SP-GAST", "branch_id": "BR-RUH", "title_en": "Gastroenterology Specialist", "title_ar": "أخصائي الجهاز الهضمي" }
+    { "id": "DOC-018", "name_en": "Dr. Sultan Al-Dossari", "name_ar": "د. سلطان الدوسري", "specialization_id": "SP-GAST", "branch_id": "BR-RUH", "title_en": "Gastroenterology Specialist", "title_ar": "أخصائي الجهاز الهضمي" },
+    { "id": "DOC-019", "name_en": "Dr. Ahmed Mostafa", "name_ar": "د. أحمد مصطفى", "specialization_id": "SP-DERM", "branch_id": "BR-RUH", "title_en": "Consultant Dermatologist", "title_ar": "استشاري الأمراض الجلدية" },
+    { "id": "DOC-020", "name_en": "Dr. Mona Adel", "name_ar": "د. منى عادل", "specialization_id": "SP-PEDI", "branch_id": "BR-CAI", "title_en": "Consultant Pediatrician", "title_ar": "استشارية طب الأطفال" },
+    { "id": "DOC-021", "name_en": "Dr. Sarah Hassan", "name_ar": "د. سارة حسن", "specialization_id": "SP-DERM", "branch_id": "BR-RUH", "title_en": "Dermatology Specialist", "title_ar": "أخصائية الأمراض الجلدية" },
+    { "id": "DOC-022", "name_en": "Dr. Layla Nasser", "name_ar": "د. ليلى ناصر", "specialization_id": "SP-CARD", "branch_id": "BR-CAI", "title_en": "Consultant Cardiologist", "title_ar": "استشارية أمراض القلب" },
+    { "id": "DOC-023", "name_en": "Dr. Youssef Ibrahim", "name_ar": "د. يوسف إبراهيم", "specialization_id": "SP-ORTH", "branch_id": "BR-RUH", "title_en": "Consultant Orthopedic Surgeon", "title_ar": "استشاري جراحة العظام" }
   ],
   "protocols": [
     {

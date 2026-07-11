@@ -21,6 +21,11 @@ class ChatState(TypedDict, total=False):
     # "yes, book me an appointment" work without the user repeating anything.
     clinical: dict[str, Any]
 
+    # A booking that has been fully resolved to one real doctor and is awaiting
+    # the user's explicit confirmation. Persists across turns so an affirmative
+    # reply ("yes"/"نعم") commits it. {"doctor_id": ...} or {} when none pending.
+    pending_booking: dict[str, Any]
+
     # The structured response for the current turn:
     # {"answer": "..."} or {"action": ..., ...}
     response: dict[str, Any]

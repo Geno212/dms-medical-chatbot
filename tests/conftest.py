@@ -11,8 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("CHECKPOINT_DB", ":memory:")
 
 from app.config import get_config
-from app.db import Repository
-from scripts.seed_db import seed
+from app.db import get_repository
 
 
 class FakeLLM:
@@ -38,14 +37,23 @@ class FakeLLM:
         return self.text
 
 
+def _scrub_test_appointments(repository) -> None:
+    """Remove only the rows the tests created (thread_id starts with 'test-').
+    Real demo bookings live under other thread ids and are never touched, so
+    the database is left exactly as the tests found it — important because the
+    suite runs against the live Supabase backend."""
+    for apt in list(repository.list_appointments_like("test-")):
+        repository.delete_appointment(apt["id"])
+
+
 @pytest.fixture(scope="session")
 def repo():
+    """The configured backend — Supabase/Postgres when APP_DATABASE_URL is set,
+    local SQLite otherwise. Tests exercise the same repository the app uses.
+    Assumes the backend is already seeded (run scripts/seed_db.py first)."""
     config = get_config()
-    if not Path(config.db_path).exists():
-        seed(skip_embeddings=True)
-    repository = Repository(config.db_path)
+    repository = get_repository(config)
+    _scrub_test_appointments(repository)  # start clean even if a prior run crashed
     yield repository
-    # Booking tests write real rows; scrub anything test threads created.
-    repository.conn().execute("DELETE FROM appointments WHERE thread_id LIKE 'test-%'")
-    repository.conn().commit()
+    _scrub_test_appointments(repository)
     repository.close()
