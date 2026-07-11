@@ -42,6 +42,25 @@ Respond with ONLY a JSON object:
 {"intent": "medical" | "action" | "other", "action": "book" | "list_doctors" | "list_specializations" | "list_branches" | "list_bookings" | "cancel_booking" | "modify_booking" | "none"}"""
 
 
+CONFIRM_SYSTEM = """The assistant just proposed a specific appointment (a named
+doctor, specialty, and branch) and asked the user to confirm it. Read the user's
+LAST reply and decide what they meant.
+
+- "yes": the user agrees / confirms / approves in any phrasing or language
+  ("yes", "exactly", "go ahead", "do it", "that's right", "perfect", "sure",
+  "نعم", "تمام", "أيوه", "ماشي", "صح", "مظبوط").
+- "no": the user declines / rejects / wants to stop ("no", "cancel", "not that",
+  "wrong one", "لا", "مش عايز", "غلط").
+- "other": the user did NOT clearly answer yes or no — e.g. they asked a
+  question, or named a different doctor/specialty/branch, or said something
+  unrelated. Do NOT force a yes/no here.
+
+Consider only the user's last reply, in whatever language it is written.
+
+Respond with ONLY a JSON object:
+{"decision": "yes" | "no" | "other"}"""
+
+
 EXTRACT_SYSTEM = """You extract booking/lookup parameters from a hospital chatbot conversation.
 Read the whole conversation and extract what the user has mentioned about:
 - doctor_name: the doctor they want (verbatim, e.g. "Dr. Sarah", "د. خالد"), or null

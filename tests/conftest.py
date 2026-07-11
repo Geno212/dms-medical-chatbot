@@ -34,6 +34,14 @@ class FakeLLM:
         if "extract booking/lookup parameters" in system:
             value = self.slots.pop(0) if self.slots else {"doctor_name": None, "specialty": None, "branch": None}
             return json.dumps(value)
+        if "asked the user to confirm" in system:
+            # Confirmation classifier: derive the decision from the last user
+            # reply using the same offline heuristic the engine falls back to,
+            # so tests read naturally ("yes" / "no" / a new request).
+            from app.graph.nodes import ChatbotEngine
+            last = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+            return json.dumps({"decision": {"yes": "yes", "no": "no", "unclear": "other"}[
+                ChatbotEngine._confirm_decision_heuristic(last)]})
         return self.text
 
 

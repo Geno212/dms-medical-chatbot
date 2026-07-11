@@ -73,20 +73,63 @@ class ChatbotEngine:
         """A pending offer was declined/abandoned -> clear it."""
         return {**self._reply(response), "pending_booking": {}}
 
-    _AFFIRM = ("yes", "yeah", "yep", "sure", "ok", "okay", "confirm", "please do",
-               "go ahead", "نعم", "اه", "أيوه", "ايوه", "تمام", "اكيد", "أكيد",
-               "احجز", "احجزلي", "اوك", "ماشي", "موافق")
-    _DECLINE = ("no", "nope", "cancel", "don't", "dont", "not now", "stop",
-                "لا", "لأ", "مش", "إلغاء", "الغاء", "لا شكرا", "مش عايز")
+    def _confirm_decision(self, state_or_text) -> str:
+        """Decide whether the user's reply to a booking-confirmation question is
+        'yes', 'no', or 'unclear'. The LLM understands the reply (any phrasing,
+        either language); the keyword heuristic is only the offline fallback
+        used when the model call fails. Accepts either the ChatState (preferred,
+        gives the LLM conversation context) or a raw string."""
+        if isinstance(state_or_text, str):
+            history = [{"role": "user", "content": state_or_text}]
+            text = state_or_text
+        else:
+            history = self._history(state_or_text)
+            text = self._last_user_message(state_or_text)
+        try:
+            raw = self.llm.chat(prompts.CONFIRM_SYSTEM, history, json_mode=True)
+            decision = (extract_json(raw) or {}).get("decision")
+            if decision in ("yes", "no"):
+                return decision
+            if decision == "other":
+                return "unclear"
+        except Exception as exc:
+            log.warning("confirmation LLM call failed (%s: %s) -> keyword fallback", type(exc).__name__, exc)
+        return self._confirm_decision_heuristic(text)
+
+    # Offline fallback only — the LLM (CONFIRM_SYSTEM) is the primary path.
+    _AFFIRM = ("yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm",
+               "confirmed", "please do", "go ahead", "do it", "book it",
+               "book", "proceed", "exactly", "correct", "right", "that's right",
+               "that's the one", "thats the one", "perfect", "great",
+               "sounds good", "fine", "yes please",
+               "نعم", "اه", "أيوه", "ايوه", "تمام", "اكيد", "أكيد", "احجز",
+               "احجزلي", "اوك", "ماشي", "موافق", "صح", "مظبوط", "ظبط", "بالظبط",
+               "زبط", "كده", "تمم", "اكد", "أكد")
+    _DECLINE = ("no", "nope", "nah", "cancel", "don't", "dont", "not now",
+                "stop", "wrong", "لا", "لأ", "مش", "إلغاء", "الغاء", "الغي",
+                "لا شكرا", "مش عايز", "غلط", "مش صح")
 
     @classmethod
-    def _confirm_decision(cls, text: str) -> str:
-        """Classify a reply to a booking-confirmation question as 'yes', 'no',
-        or 'unclear' (a fresh request that discards the pending offer)."""
+    def _confirm_decision_heuristic(cls, text: str) -> str:
+        """Keyword fallback for the confirmation decision when the LLM is down.
+        Whole-word matching (not substring) so a name containing a keyword or
+        a phrase like 'no problem' isn't misread."""
         t = (text or "").strip().lower()
-        if any(w in t for w in cls._DECLINE):
+        tokens = re.findall(r"[\w']+|[؀-ۿ]+", t)
+        token_set = set(tokens)
+
+        def has(phrases: tuple[str, ...]) -> bool:
+            for p in phrases:
+                if " " in p:            # multi-word phrase -> substring is fine
+                    if p in t:
+                        return True
+                elif p in token_set:    # single word -> must be a whole token
+                    return True
+            return False
+
+        if has(cls._DECLINE):
             return "no"
-        if any(t == w or t.startswith(w + " ") or w in t.split() for w in cls._AFFIRM):
+        if has(cls._AFFIRM):
             return "yes"
         return "unclear"
 
@@ -96,14 +139,21 @@ class ChatbotEngine:
         user_message = self._last_user_message(state)
         language = detect_language(user_message)
 
-        # If a booking is awaiting confirmation and the user gives a clear
-        # yes/no, route straight to the action path so the confirmation is
-        # honored — even if the router LLM is unavailable (a bare "yes" is not
-        # a booking keyword the heuristic would otherwise catch).
-        if (state.get("pending_booking") or {}).get("doctor_id"):
-            if self._confirm_decision(user_message) in ("yes", "no"):
-                log.info("router: pending booking + %r -> action/book (confirmation)", user_message[:40])
+        # If a booking is awaiting confirmation, the reply belongs to the action
+        # path so the confirmation can be resolved there. A clear yes/no routes
+        # straight to action/book. An unclear reply also stays in the action
+        # path *unless* the user clearly switched to a different concrete action
+        # (a new lookup, cancel, etc.) — in which case we honor that instead.
+        pending = (state.get("pending_booking") or {}).get("doctor_id")
+        if pending:
+            decision = self._confirm_decision(state)
+            if decision in ("yes", "no"):
+                log.info("router: pending booking + confirmation %r -> action/book", decision)
                 return {"intent": "action", "action": "book", "language": language}
+            # decision == "unclear": let the normal router run; if it doesn't
+            # pick a concrete *different* action, keep the turn in the action
+            # path so the action node re-asks yes/no rather than drifting into
+            # a medical answer.
 
         intent, action = "medical", "none"
         source = "llm"
@@ -129,6 +179,12 @@ class ChatbotEngine:
             intent = "action"
         if intent == "action" and action == "none":
             action = "book"  # affirmative reply to a booking offer, most common case
+        # Pending booking + an unclear reply that the router read as medical/
+        # other (not a concrete action): keep it in the action path so the
+        # confirmation is re-asked, instead of drifting into a medical answer.
+        if pending and intent != "action":
+            log.info("router: pending booking + unclear reply -> keeping in action path")
+            intent, action = "action", "book"
         log.info(
             "router: message=%r language=%s intent=%s action=%s source=%s",
             user_message[:80], language, intent, action, source,
@@ -251,7 +307,7 @@ class ChatbotEngine:
         # falls through and re-resolves (the pending offer is discarded).
         pending = state.get("pending_booking") or {}
         if pending.get("doctor_id"):
-            decision = self._confirm_decision(self._last_user_message(state))
+            decision = self._confirm_decision(state)
             if decision == "yes":
                 doctor = self.repo.get_doctor(pending["doctor_id"])
                 log.info("pending booking confirmed by user -> committing %s", pending["doctor_id"])
@@ -262,11 +318,28 @@ class ChatbotEngine:
                         if language == "ar"
                         else "No problem, I won't book that. Who or which specialty would you like instead?")
                 return self._reply_clearing({"answer": text})
-            # Not a clear yes/no -> treat as a fresh request; discard the offer
-            # and continue to normal resolution below.
-
-        slots = self._extract_slots(state)
-        log.info("slot extraction: %s", slots)
+            # Unclear reply. If the user named a *new* doctor/specialty/branch,
+            # they've changed their request -> discard the offer and re-resolve
+            # below. If they named nothing, don't silently re-offer the same
+            # booking (that looks stuck): keep it pending and ask a crisp yes/no.
+            slots = self._extract_slots(state)
+            log.info("slot extraction (pending-unclear): %s", slots)
+            if not any(slots.get(k) for k in ("doctor_name", "specialty", "branch")):
+                doctor = self.repo.get_doctor(pending["doctor_id"])
+                branch = self.repo.get_branch(doctor["branch_id"])
+                log.info("pending booking + unclear reply with no new slots -> re-asking yes/no")
+                if language == "ar":
+                    text = (f"لم أتأكد من ردّك. هل تريد تأكيد الحجز مع {doctor['name_ar']} "
+                            f"({doctor['specialty_ar']}، فرع {branch['name_ar']})؟ من فضلك أجب بنعم أو لا.")
+                else:
+                    text = (f"Sorry, I didn't catch that. Do you want to confirm the booking with "
+                            f"{doctor['name_en']} ({doctor['specialty_en']}, {branch['name_en']} branch)? "
+                            f"Please reply yes or no.")
+                return {**self._reply({"answer": text}), "pending_booking": pending}
+            # New details named -> fall through to re-resolve with these slots.
+        else:
+            slots = self._extract_slots(state)
+            log.info("slot extraction: %s", slots)
 
         branch, branch_candidates = resolve_entity(slots.get("branch"), self.repo.list_branches())
         specialization, spec_candidates = resolve_entity(slots.get("specialty"), self.repo.list_specializations())

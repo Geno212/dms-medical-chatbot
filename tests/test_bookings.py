@@ -247,6 +247,37 @@ def test_branch_disambiguates_same_name_same_specialty(repo):
     assert committed["branch"] == "Cairo"
 
 
+def test_confirmation_accepts_varied_affirmatives(repo):
+    """Regression: 'exactly' (and other natural yeses) must confirm the pending
+    booking, not loop back to the same offer. The LLM understands the reply;
+    the heuristic is only a fallback."""
+    for affirm in ["exactly", "yes please", "go ahead", "that's the one", "صح كده"]:
+        llm = FakeLLM(
+            router={"intent": "action", "action": "book"},
+            slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": None},
+        )
+        graph, thread = run_graph(repo, llm)
+        offer = chat_turn(graph, thread, "book me with Dr. Sarah in Neurology")
+        assert "answer" in offer and "action" not in offer
+        committed = chat_turn(graph, thread, affirm)
+        assert committed.get("action") == "book_appointment", f"{affirm!r} should confirm"
+
+
+def test_unclear_reply_reasks_without_relisting(repo):
+    """An ambiguous reply to a confirmation must re-ask yes/no, not silently
+    re-offer (which looked stuck to the user)."""
+    llm = FakeLLM(
+        router={"intent": "action", "action": "book"},
+        slots={"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": None},
+    )
+    graph, thread = run_graph(repo, llm)
+    chat_turn(graph, thread, "book me with Dr. Sarah in Neurology")
+    reask = chat_turn(graph, thread, "hmm")
+    assert "answer" in reask and "action" not in reask
+    assert "yes or no" in reask["answer"].lower() or "نعم" in reask["answer"]
+    assert repo.list_appointments(thread) == []  # still nothing written
+
+
 def test_declining_confirmation_writes_nothing(repo):
     llm = FakeLLM(
         router={"intent": "action", "action": "book"},
