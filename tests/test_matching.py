@@ -69,6 +69,18 @@ def test_same_name_same_specialty_pinned_by_branch(repo):
     assert cairo["id"] != riyadh["id"]
 
 
+def test_stated_branch_survives_a_wrong_carried_specialty(repo):
+    """Regression: when a specialty carried from earlier context is wrong for
+    the named doctor, the branch the user stated *this turn* must still be
+    honored — not silently dropped to a name-only match. Two 'Dr. Mona Adel'
+    exist (Cardiology/Alexandria, Pediatrics/Cairo); a wrong carried specialty
+    (Orthopedics) + stated branch (Alexandria) must still resolve uniquely."""
+    docs = repo.list_doctors()
+    m, c = resolve_doctor("د. منى عادل", docs, specialization_id="SP-ORTH", branch_id="BR-ALX")
+    assert m and m["id"] == "DOC-006"  # Alexandria Mona, not the Cairo one
+    assert m["branch_id"] == "BR-ALX"
+
+
 def test_resolve_doctor_ambiguous_surname(repo):
     # "Hassan" appears in Dr. Sarah Hassan and Dr. Hassan El-Guindy:
     # the resolver must ask, not guess.

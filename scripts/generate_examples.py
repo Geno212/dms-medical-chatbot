@@ -26,6 +26,7 @@ SCENARIOS = {
             "It gets worse when I look at bright light, is that serious?",
             "Yes, please book me an appointment",
             "Dr. Sarah please, the Cairo branch works for me",
+            "yes, confirm it",
         ],
     },
     "02_arabic_medical_conversation.md": {
@@ -33,7 +34,8 @@ SCENARIOS = {
         "turns": [
             "عندي ألم في الصدر من الصباح وأحس بضيق في التنفس",
             "الألم مش مستمر، بييجي وبيروح",
-            "طيب احجزلي موعد مع دكتور قلب في القاهرة",
+            "طيب احجزلي موعد مع دكتورة منى عادل في الإسكندرية",
+            "اه تمام",
         ],
     },
     "03_data_lookups.md": {
@@ -48,9 +50,18 @@ SCENARIOS = {
         "title": "Managing bookings: book, list, cancel (persisted records)",
         "turns": [
             "I want to book an appointment with Dr. Khalid Al-Mansouri",
+            "yes",
             "Show me my bookings",
             "Please cancel my booking",
             "Show me my bookings again",
+        ],
+    },
+    "06_same_name_disambiguation.md": {
+        "title": "Same-name doctors: branch disambiguation (never-guess)",
+        "turns": [
+            "I'd like to book with Dr. Layla in cardiology",
+            "the Riyadh branch please",
+            "yes",
         ],
     },
 }

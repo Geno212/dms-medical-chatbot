@@ -219,7 +219,7 @@ audio file; in the CLI use `/voice path/to/audio.wav`.
 ## 5. Tests
 
 ```bash
-python -m pytest tests/ -q     # 59 tests
+python -m pytest tests/ -q     # 61 tests
 ```
 
 The suite injects a scripted fake LLM, so the full pipeline — routing,
@@ -352,6 +352,6 @@ public/              UI branding: theme.json, custom.css, logo, favicon
 data/                dataset JSON + seeded SQLite DB (+ runtime: chainlit.db,
                      conversations.db — gitignored)
 scripts/             seed_db.py, generate_examples.py
-tests/               59 deterministic tests (fake LLM)
+tests/               61 deterministic tests (fake LLM)
 examples/            deliverable conversation transcripts
 ```

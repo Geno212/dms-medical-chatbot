@@ -106,17 +106,40 @@ def resolve_doctor(
     specialization_id: str | None = None,
     branch_id: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-    """Resolve a doctor mention, using specialty/branch as disambiguators."""
-    pool = [
-        d for d in doctors
-        if (not specialization_id or d["specialization_id"] == specialization_id)
-        and (not branch_id or d["branch_id"] == branch_id)
-    ]
-    match, candidates = resolve_entity(query, pool)
-    if match or candidates:
-        return match, candidates
-    # Fall back to the full roster: the user may have named a doctor while
-    # misremembering the branch/specialty — surface that instead of "not found".
-    if pool is not doctors and (specialization_id or branch_id):
-        return resolve_entity(query, doctors)
+    """Resolve a doctor mention, using specialty/branch as disambiguators.
+
+    Filters are relaxed in order of trust when they yield no match: the
+    branch/specialty the *user stated this turn* is trusted more than a
+    specialty carried over from earlier context. Concretely we try, in order:
+      1. specialty + branch   (both constraints)
+      2. branch only          (a carried-over specialty may be wrong — e.g. the
+                               patient described symptoms pointing elsewhere but
+                               then named a doctor in a specific branch)
+      3. specialty only
+      4. no filter            (named a doctor while misremembering both)
+    The first filter set that produces a match or candidates wins, so an
+    explicit branch is never silently discarded to force a name-only match.
+    """
+    def _pool(spec: str | None, branch: str | None) -> list[dict[str, Any]]:
+        return [
+            d for d in doctors
+            if (not spec or d["specialization_id"] == spec)
+            and (not branch or d["branch_id"] == branch)
+        ]
+
+    filter_sets = [(specialization_id, branch_id)]
+    if specialization_id and branch_id:
+        filter_sets.append((None, branch_id))   # keep the stated branch first
+        filter_sets.append((specialization_id, None))
+    if specialization_id or branch_id:
+        filter_sets.append((None, None))
+
+    seen: set[tuple[str | None, str | None]] = set()
+    for spec, branch in filter_sets:
+        if (spec, branch) in seen:
+            continue
+        seen.add((spec, branch))
+        match, candidates = resolve_entity(query, _pool(spec, branch))
+        if match or candidates:
+            return match, candidates
     return None, []

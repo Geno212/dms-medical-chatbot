@@ -127,6 +127,33 @@ def test_multi_turn_booking_resolves_after_choice(repo):
     assert final["specialty"] == "Neurology"  # carried from the medical turn
 
 
+def test_weak_followup_does_not_clobber_strong_clinical_specialty(repo):
+    """Regression: a strong first symptom (chest pain -> Cardiology) then a
+    vague follow-up ("the pain comes and goes", which retrieves weakly) must
+    keep the Cardiology context, so a later booking still fills Cardiology —
+    the weak turn must not overwrite it with whatever scraped in."""
+    llm = FakeLLM(
+        router=[
+            {"intent": "medical", "action": "none"},   # strong: chest pain
+            {"intent": "medical", "action": "none"},   # vague follow-up
+            {"intent": "action", "action": "book"},    # book, no specialty named
+        ],
+        slots={"doctor_name": "Dr. Mona Adel", "specialty": None, "branch": "Alexandria"},
+    )
+    graph, thread = run_graph(repo, llm)
+    chat_turn(graph, thread, "عندي ألم في الصدر وأحس بضيق في التنفس")
+    chat_turn(graph, thread, "الألم مش مستمر، بييجي وبيروح")
+    offer = chat_turn(graph, thread, "احجزلي مع دكتورة منى عادل في الإسكندرية")
+    # Resolves uniquely to the Alexandria (Cardiology) Mona and offers it —
+    # the wrong specialty was never carried, and the stated branch held.
+    assert "answer" in offer
+    committed = chat_turn(graph, thread, "yes")
+    assert committed["action"] == "book_appointment"
+    assert committed["doctor_id"] == "DOC-006"
+    assert committed["branch"] == "Alexandria"
+    assert committed["specialty"] == "Cardiology"
+
+
 def test_specialty_mislabeled_as_doctor_name_is_not_rejected(repo):
     """Regression: after the bot offered "our Neurology doctors", the user said
     "yes, book me" and the extractor emitted doctor_name="Neurology". The bot

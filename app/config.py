@@ -69,6 +69,10 @@ class Config:
     # escalation. A weak hit (an emergency protocol scraping in near a
     # non-medical message) must NOT force emergency guidance.
     triage_min_score: float = field(default_factory=lambda: float(os.getenv("TRIAGE_MIN_SCORE", "0.30")))
+    # Minimum retrieval score for a follow-up medical turn to *overwrite* the
+    # specialty carried in clinical context. A weak/vague follow-up keeps the
+    # stronger specialty established earlier instead of clobbering it.
+    clinical_min_score: float = field(default_factory=lambda: float(os.getenv("CLINICAL_MIN_SCORE", "0.45")))
 
     # --- Logging (pipeline trace: router decisions, slot extraction, entity
     # resolution, retrieval hits — set LOG_LEVEL=WARNING to silence) ---

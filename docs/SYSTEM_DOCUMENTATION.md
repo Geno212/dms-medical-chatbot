@@ -528,7 +528,7 @@ contradict the machine-readable data shown below it.
 
 ```mermaid
 flowchart TB
-    subgraph Suite["59 Deterministic Tests  (pytest)"]
+    subgraph Suite["61 Deterministic Tests  (pytest)"]
         TG["test_graph.py<br/>• routing decisions (EN + AR)<br/>• cross-turn slot-fill<br/>• triage escalation gate<br/>• ambiguity refusal"]
         TB["test_bookings.py<br/>• booking confirmation (yes/no/unclear)<br/>• same-name + branch disambiguation<br/>• cancel by name / modify<br/>• list bookings, scoped to thread_id"]
         TM["test_matching.py<br/>• bilingual name scoring<br/>• Arabic normalization / title stripping<br/>• same-name-same-specialty (branch)"]
@@ -557,8 +557,12 @@ guarantees the outcome:
    prompt fix **+** code coercion: a named action overrides the intent.
 3. Triage escalating on a weak emergency hit → score threshold on the match.
 4. Booking-edit hallucinating a reschedule → deterministic cancel-and-rebook.
-5. Confirmation missing a colloquial "اه" → LLM classifier with keyword
-   fallback. Each fix adds a regression test.
+5. Confirmation missing a colloquial "اه" → LLM classifier with keyword fallback.
+6. A vague follow-up ("the pain comes and goes") overwriting a strong clinical
+   specialty → only overwrite when the new match clears a confidence threshold.
+7. A wrong carried specialty dropping the user's *stated* branch → the doctor
+   resolver relaxes filters in trust order (keeps the stated branch before the
+   carried specialty). Each fix adds a regression test.
 
 ---
 

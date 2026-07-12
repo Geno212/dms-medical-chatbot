@@ -8,18 +8,31 @@
 
 ```json
 {
+  "answer": "I'll book you with Dr. Khalid Al-Mansouri (Cardiology, Riyadh branch). Shall I confirm this booking?"
+}
+```
+
+**User:** yes
+
+**Chatbot:**
+
+```json
+{
   "action": "book_appointment",
-  "appointment_id": "APT-48F6CE",
+  "appointment_id": "APT-69F247",
   "status": "confirmed",
-  "created_at": "2026-07-09 11:00 UTC",
+  "created_at": "2026-07-12 01:52 UTC",
   "doctor_id": "DOC-003",
   "doctor_name": "Dr. Khalid Al-Mansouri",
   "doctor_name_ar": "د. خالد المنصوري",
   "specialty": "Cardiology",
+  "specialty_ar": "أمراض القلب",
   "specialty_id": "SP-CARD",
   "branch": "Riyadh",
+  "branch_ar": "الرياض",
   "branch_id": "BR-RUH",
-  "hospital": "Al-Mashreq Medical Group - Riyadh Branch"
+  "hospital": "Al-Mashreq Medical Group - Riyadh Branch",
+  "hospital_ar": "مجموعة المشرق الطبية - فرع الرياض"
 }
 ```
 
@@ -32,12 +45,12 @@
   "action": "list_bookings",
   "appointments": [
     {
-      "appointment_id": "APT-48F6CE",
+      "appointment_id": "APT-69F247",
       "status": "confirmed",
       "doctor": "Dr. Khalid Al-Mansouri",
       "specialty": "Cardiology",
       "branch": "Riyadh",
-      "created_at": "2026-07-09 11:00 UTC"
+      "created_at": "2026-07-12 01:52 UTC"
     }
   ]
 }
@@ -50,12 +63,12 @@
 ```json
 {
   "action": "cancel_booking",
-  "appointment_id": "APT-48F6CE",
+  "appointment_id": "APT-69F247",
   "status": "cancelled",
   "doctor": "Dr. Khalid Al-Mansouri",
   "specialty": "Cardiology",
   "branch": "Riyadh",
-  "created_at": "2026-07-09 11:00 UTC"
+  "created_at": "2026-07-12 01:52 UTC"
 }
 ```
 
@@ -68,12 +81,12 @@
   "action": "list_bookings",
   "appointments": [
     {
-      "appointment_id": "APT-48F6CE",
+      "appointment_id": "APT-69F247",
       "status": "cancelled",
       "doctor": "Dr. Khalid Al-Mansouri",
       "specialty": "Cardiology",
       "branch": "Riyadh",
-      "created_at": "2026-07-09 11:00 UTC"
+      "created_at": "2026-07-12 01:52 UTC"
     }
   ]
 }

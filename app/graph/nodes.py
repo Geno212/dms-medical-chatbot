@@ -238,13 +238,24 @@ class ChatbotEngine:
         if protocols:
             top = protocols[0]
             specialization = self.repo.get_specialization(top["specialization_id"])
-            if specialization:
+            # Only (over)write the carried clinical specialty when this turn's
+            # top match is confident. A vague follow-up ("the pain comes and
+            # goes") retrieves something weakly and must NOT clobber a strong
+            # specialty established earlier (e.g. chest pain -> Cardiology).
+            already = clinical.get("suggested_specialization_id")
+            confident = top["score"] >= self.config.clinical_min_score
+            if specialization and (confident or not already):
                 clinical = {
                     "suggested_specialization_id": specialization["id"],
                     "symptoms": user_message,
                 }
                 specialty_name = specialization["name_en"] if language == "en" else specialization["name_ar"]
-                log.info("clinical context updated: suggested_specialization=%s", specialization["name_en"])
+                log.info("clinical context updated: suggested_specialization=%s (score=%.4f)", specialization["name_en"], top["score"])
+            elif already:
+                kept = self.repo.get_specialization(already)
+                if kept:
+                    specialty_name = kept["name_en"] if language == "en" else kept["name_ar"]
+                    log.info("clinical context kept: %s (this turn's top score %.4f < %.2f)", kept["name_en"], top["score"], self.config.clinical_min_score)
             # Escalate only when an emergency protocol matches *strongly*. A
             # weak emergency hit (e.g. a booking-management message scraping an
             # emergency protocol at score ~0.20) must not force emergency

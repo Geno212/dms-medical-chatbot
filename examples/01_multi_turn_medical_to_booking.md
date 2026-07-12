@@ -8,7 +8,7 @@
 
 ```json
 {
-  "answer": "I understand how uncomfortable you must be feeling with your severe headache and fever lasting for two days. Given this duration, it's important to consider the possibility of an inflammation or infection that might require medical examination. Please rest fully, drink plenty of water, and avoid bright light. If your symptoms persist or worsen—especially if you experience neck stiffness, confusion, or vomiting—it would be best to see a neurologist promptly. Would you like to book an appointment with one of our Neurology doctors at the hospital?"
+  "answer": "I understand how uncomfortable that must be for you. Given your symptoms of a severe headache lasting more than 24 hours along with a fever, it's important to rest fully, drink plenty of fluids, and avoid bright light. However, if your symptoms persist or worsen—especially if you experience neck stiffness, confusion, or vomiting—it would be best to see a neurologist promptly for an evaluation. Would you like us to book an appointment with one of our Neurology doctors at the hospital?"
 }
 ```
 
@@ -18,7 +18,7 @@
 
 ```json
 {
-  "answer": "I understand how severe this can feel, especially with your headache worsening in bright light. This symptom could indicate a more serious condition and aligns with the guidance suggesting an evaluation by a neurologist if symptoms persist or worsen. Please rest, stay hydrated, and avoid bright light as much as possible. If your condition doesn't improve or gets worse, it would be wise to see a neurologist soon. Would you like to book an appointment with one of our Neurology doctors at the hospital?"
+  "answer": "I understand how distressing that must be. The fact that your headache worsens with bright light could indicate a more serious condition, such as inflammation or infection in the brain. It's important to rest fully and stay hydrated. However, if your symptoms continue to worsen—especially if you experience neck stiffness, confusion, or vomiting—it would be best to see a neurologist promptly for an evaluation. Would you like us to book an appointment with one of our Neurology doctors at the hospital?"
 }
 ```
 
@@ -38,17 +38,30 @@
 
 ```json
 {
+  "answer": "I'll book you with Dr. Sarah Hassan (Neurology, Cairo branch). Shall I confirm this booking?"
+}
+```
+
+**User:** yes, confirm it
+
+**Chatbot:**
+
+```json
+{
   "action": "book_appointment",
-  "appointment_id": "APT-C42E81",
+  "appointment_id": "APT-2B66C4",
   "status": "confirmed",
-  "created_at": "2026-07-09 10:54 UTC",
+  "created_at": "2026-07-12 01:48 UTC",
   "doctor_id": "DOC-001",
   "doctor_name": "Dr. Sarah Hassan",
   "doctor_name_ar": "د. سارة حسن",
   "specialty": "Neurology",
+  "specialty_ar": "المخ والأعصاب",
   "specialty_id": "SP-NEUR",
   "branch": "Cairo",
+  "branch_ar": "القاهرة",
   "branch_id": "BR-CAI",
-  "hospital": "Al-Mashreq Medical Group - Cairo Branch"
+  "hospital": "Al-Mashreq Medical Group - Cairo Branch",
+  "hospital_ar": "مجموعة المشرق الطبية - فرع القاهرة"
 }
 ```
