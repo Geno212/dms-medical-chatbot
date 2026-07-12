@@ -17,7 +17,7 @@ from ..config import Config, get_config
 from ..db import Repository
 from ..llm import ChatLLM, extract_json
 from ..logging_setup import get_logger
-from ..matching import resolve_doctor, resolve_entity
+from ..matching import name_score, resolve_doctor, resolve_entity
 from ..vectorstore import ProtocolRetriever
 from . import prompts
 from .state import ChatState
@@ -559,6 +559,40 @@ class ChatbotEngine:
             "appointments": [self._appointment_view(a, language) for a in appointments],
         }
 
+    @staticmethod
+    def _match_appointment_by_name(user_message: str, active: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Among the active bookings, find those whose doctor the user named in
+        free text (e.g. 'the Dr. Layla booking', 'حجز دكتور ليلى'). Returns the
+        matching bookings (0, 1, or several) — the caller decides, never guesses.
+
+        The user's phrasing carries extra words ('cancel the … one', 'حجز
+        دكتور …'), so we look for the doctor's *distinctive name tokens* inside
+        the message rather than requiring the whole message to be a name. A
+        booking matches when a meaningful part of its doctor's name appears."""
+        if not user_message or not user_message.strip():
+            return []
+        from ..matching import normalize, strip_title
+        msg_tokens = set(normalize(user_message).split())
+        if not msg_tokens:
+            return []
+        matches = []
+        for a in active:
+            hit = False
+            for full in (a["doctor_en"], a["doctor_ar"]):
+                # Distinctive name tokens (drop the title); a token counts as
+                # present if it fuzzily matches any word in the message.
+                for tok in strip_title(full).split():
+                    if len(tok) < 2:
+                        continue
+                    if any(name_score(tok, mt) >= 0.85 for mt in msg_tokens):
+                        hit = True
+                        break
+                if hit:
+                    break
+            if hit:
+                matches.append(a)
+        return matches
+
     def _cancel_booking_response(self, thread_id: str, user_message: str, language: str) -> dict[str, Any]:
         appointments = self.repo.list_appointments(thread_id)
         active = [a for a in appointments if a["status"] == "confirmed"]
@@ -579,11 +613,18 @@ class ChatbotEngine:
                 return {"answer": "لا توجد لديك حجوزات نشطة لإلغائها."}
             return {"answer": "You have no active bookings to cancel."}
         else:
-            options = "؛ ".join(f"{a['id']} ({a['doctor_ar']})" for a in active) if language == "ar" \
-                else "; ".join(f"{a['id']} ({a['doctor_en']})" for a in active)
-            if language == "ar":
-                return {"answer": f"لديك أكثر من حجز نشط: {options}. أي حجز تودّ إلغاءه؟ اذكر رقم الحجز."}
-            return {"answer": f"You have more than one active booking: {options}. Which one would you like to cancel? Please give the booking reference."}
+            # Multiple active bookings: let the user name the doctor instead of
+            # forcing an APT reference (e.g. "cancel the Dr. Layla one").
+            by_name = self._match_appointment_by_name(user_message, active)
+            if len(by_name) == 1:
+                target = by_name[0]
+                log.info("cancel target matched by doctor name -> %s", target["id"])
+            else:
+                options = "؛ ".join(f"{a['id']} ({a['doctor_ar']})" for a in active) if language == "ar" \
+                    else "; ".join(f"{a['id']} ({a['doctor_en']})" for a in active)
+                if language == "ar":
+                    return {"answer": f"لديك أكثر من حجز نشط: {options}. أي حجز تودّ إلغاءه؟ يمكنك ذكر اسم الطبيب أو رقم الحجز."}
+                return {"answer": f"You have more than one active booking: {options}. Which one would you like to cancel? You can give the doctor's name or the booking reference."}
 
         cancelled = self.repo.cancel_appointment(target["id"])
         log.info("appointment cancelled: %s (thread=%s)", target["id"], thread_id)
@@ -620,11 +661,16 @@ class ChatbotEngine:
         elif len(active) == 1:
             target = active[0]
         else:
-            options = "؛ ".join(f"{a['id']} ({a['doctor_ar']})" for a in active) if language == "ar" \
-                else "; ".join(f"{a['id']} ({a['doctor_en']})" for a in active)
-            if language == "ar":
-                return {"answer": f"لديك أكثر من حجز نشط: {options}. أي حجز تودّ تعديله؟ اذكر رقم الحجز."}
-            return {"answer": f"You have more than one active booking: {options}. Which one would you like to change? Please give the booking reference."}
+            by_name = self._match_appointment_by_name(user_message, active)
+            if len(by_name) == 1:
+                target = by_name[0]
+                log.info("modify target matched by doctor name -> %s", target["id"])
+            else:
+                options = "؛ ".join(f"{a['id']} ({a['doctor_ar']})" for a in active) if language == "ar" \
+                    else "; ".join(f"{a['id']} ({a['doctor_en']})" for a in active)
+                if language == "ar":
+                    return {"answer": f"لديك أكثر من حجز نشط: {options}. أي حجز تودّ تعديله؟ يمكنك ذكر اسم الطبيب أو رقم الحجز."}
+                return {"answer": f"You have more than one active booking: {options}. Which one would you like to change? You can give the doctor's name or the booking reference."}
 
         cancelled = self.repo.cancel_appointment(target["id"])
         log.info("booking modify -> cancelled %s for rebooking (thread=%s)", target["id"], thread_id)

@@ -114,6 +114,32 @@ def test_cancel_among_many_requires_then_accepts_reference(repo):
     assert resolved["appointment_id"] == first["appointment_id"]
 
 
+def test_cancel_among_many_accepts_doctor_name(repo):
+    """With several active bookings the user can name the doctor to cancel,
+    not only an APT reference (e.g. 'cancel the Dr. Sarah booking')."""
+    llm = FakeLLM(
+        router=[
+            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "book"},
+            {"intent": "action", "action": "cancel_booking"},
+        ],
+        slots=[
+            {"doctor_name": "Dr. Sarah", "specialty": "Neurology", "branch": None},
+            {"doctor_name": "Dr. Khalid", "specialty": None, "branch": None},
+        ],
+    )
+    graph, thread = run_graph(repo, llm)
+    chat_turn(graph, thread, "Book me with Dr. Sarah in Neurology")
+    sarah = chat_turn(graph, thread, "yes")
+    chat_turn(graph, thread, "also book me with Dr. Khalid")
+    chat_turn(graph, thread, "yes")
+    # Name the doctor instead of the APT reference.
+    resolved = chat_turn(graph, thread, "cancel the Dr. Sarah booking")
+    assert resolved["action"] == "cancel_booking"
+    assert resolved["appointment_id"] == sarah["appointment_id"]
+    assert repo.get_appointment(sarah["appointment_id"])["status"] == "cancelled"
+
+
 def test_cancel_with_unknown_reference_fails_safely(repo):
     llm = FakeLLM(router={"intent": "action", "action": "cancel_booking"}, slots={})
     graph, thread = run_graph(repo, llm)
