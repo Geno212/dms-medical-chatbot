@@ -385,6 +385,18 @@ a mix of prose and data. Example confirmed booking payload:
 The payload is built entirely from database rows — the model never produces
 field values.
 
+**Lifecycle actions** (all deterministic, scoped to the conversation thread):
+
+| Action | Trigger | Behaviour |
+|---|---|---|
+| `book_appointment` | "book me with Dr. X" | Resolve → **confirm** (offer doctor/specialty/branch) → write on "yes" |
+| `list_bookings` | "my bookings" | List the thread's appointments |
+| `cancel_booking` | "cancel my booking" | Cancel — the user identifies which by **naming the doctor** ("cancel the Dr. Layla one") or by the `APT-XXXXXX` reference; asks if it's still ambiguous |
+| `modify_booking` | "change / reschedule my booking" | In-place reschedule is not supported, so rather than let the model fabricate one, the existing booking is cancelled and the user is invited to rebook |
+
+Every path follows the same never-guess rule: a mention that maps to more than
+one real record produces a clarification, never a silent choice.
+
 ---
 
 ## 9. Conversation Persistence & Memory
