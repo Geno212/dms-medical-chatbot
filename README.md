@@ -56,13 +56,24 @@ jobs only: classify intent, extract *verbatim* slot mentions ("Dr. Sarah",
 1. **Resolves** mentions against the database with bilingual fuzzy matching
    (Arabic orthography normalization, title stripping, partial-name and alias
    matching) — so "د. سارة" → `Dr. Sarah Hassan (DOC-001)`.
-2. **Refuses to guess**: an ambiguous mention ("Dr. Hassan" matches two
-   doctors) or an unknown doctor produces a clarification question listing
-   *real* options — never a fabricated booking.
-3. **Builds the JSON** exclusively from database rows, with IDs
+2. **Refuses to guess**: an ambiguous mention produces a clarification listing
+   *real* options — never a fabricated booking. The dataset deliberately
+   includes same-name doctors so this is exercised at three levels: same name /
+   different specialty (disambiguate by specialty), same name + same specialty /
+   different branch (disambiguate by **branch**), and unknown names (offer real
+   alternatives).
+3. **Confirms before writing**: once one doctor is resolved, the bot echoes the
+   identified doctor + specialty + branch and asks the user to confirm; only an
+   explicit "yes" writes the appointment (the reply is understood by the LLM,
+   with a keyword fallback offline). This makes the identification explicit
+   (task req 6) instead of booking silently.
+4. **Builds the JSON** exclusively from database rows, with IDs
    (`doctor_id`, `branch_id`, `specialty_id`) a downstream booking system needs.
 
 This makes hallucinated bookings structurally impossible, not just unlikely.
+The same never-guess matching lets the user **cancel or change a booking by
+naming the doctor** ("cancel the Dr. Layla booking"), not only by an
+`APT-XXXXXX` reference.
 
 ### Multi-turn context & slot-filling
 
@@ -91,7 +102,8 @@ Every reply is one of two disjoint shapes (per the task spec):
 { "answer": "conversational medical text, in the user's language" }
 // or
 { "action": "book_appointment" | "list_doctors" | "list_specializations"
-          | "list_branches" | "list_bookings" | "cancel_booking", ... }
+          | "list_branches" | "list_bookings" | "cancel_booking"
+          | "modify_booking", ... }
 ```
 
 Booking example (all values verified against the DB; the booking is a real
@@ -207,14 +219,19 @@ audio file; in the CLI use `/voice path/to/audio.wav`.
 ## 5. Tests
 
 ```bash
-python -m pytest tests/ -q     # 42 tests
+python -m pytest tests/ -q     # 59 tests
 ```
 
 The suite injects a scripted fake LLM, so the full pipeline — routing,
 retrieval grounding, bilingual entity resolution, multi-turn slot-filling,
-verified payload construction, booking lifecycle (create/list/cancel),
-ambiguity refusal, heuristic fallback — is tested deterministically without
-a model server.
+booking confirmation (incl. colloquial-Arabic yes/no), same-name and
+same-name-same-specialty disambiguation, verified payload construction, booking
+lifecycle (create / list / cancel-by-name / modify), ambiguity refusal,
+heuristic fallback — is tested deterministically (the model itself is scripted).
+
+The tests run against **the configured backend** — so with `APP_DATABASE_URL`
+set they exercise Supabase end-to-end, and clean up only their own rows.
+Unset it to run offline on local SQLite.
 
 ## 5b. Pipeline logging (observability)
 
@@ -245,8 +262,10 @@ that calls `build_graph()`.
 
 `data/hospital_dataset.json` — AI-generated, fully bilingual: **Al-Mashreq
 Medical Group** (مجموعة المشرق الطبية), 3 branches (Cairo, Alexandria, Riyadh),
-8 specializations, 18 doctors, and 14 symptom→specialty medical protocols with
-triage levels and curated Arabic/English symptom keywords. Edit it and re-run
+8 specializations, 23 doctors, and 14 symptom→specialty medical protocols with
+triage levels and curated Arabic/English symptom keywords. Several doctors share
+a name on purpose (same name across specialties, and same name + same specialty
+across branches) to exercise the never-guess disambiguation. Edit it and re-run
 `scripts/seed_db.py` to change the hospital.
 
 ## 7. Running on Supabase (PostgreSQL + pgvector)
@@ -308,7 +327,7 @@ Every task requirement and deliverable maps to something concrete in this repo.
 |---|---|
 | Full source code | `app/`, `tests/`, `scripts/` |
 | README (approach, models, prompts, run) | this file, §1–§7 |
-| Hospital test dataset | `data/hospital_dataset.json` (3 branches · 8 specializations · 18 doctors · 14 protocols) |
+| Hospital test dataset | `data/hospital_dataset.json` (3 branches · 8 specializations · 23 doctors · 14 protocols) |
 | Multi-turn medical → booking example | `examples/01…` (EN), `examples/02…` (AR) |
 | Doctors / specializations lookup example | `examples/03_data_lookups.md` |
 | Voice input example | `examples/04_voice_input.md` |
@@ -333,6 +352,6 @@ public/              UI branding: theme.json, custom.css, logo, favicon
 data/                dataset JSON + seeded SQLite DB (+ runtime: chainlit.db,
                      conversations.db — gitignored)
 scripts/             seed_db.py, generate_examples.py
-tests/               42 deterministic tests (fake LLM)
+tests/               59 deterministic tests (fake LLM)
 examples/            deliverable conversation transcripts
 ```

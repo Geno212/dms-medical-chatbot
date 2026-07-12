@@ -120,8 +120,9 @@ do and what it is never allowed to do:
 | Detect user language (AR / EN) | Regex heuristic | Deterministic, no cost |
 | Extract slot mentions from text | LLM (narrow JSON question) | Needs NLU |
 | Resolve entity to database row | `matching.py` (code) | Must be correct — never guess |
+| Interpret a confirmation reply (yes/no) | LLM (narrow JSON) + keyword fallback | Understands "اه"/"exactly" in any phrasing; code guards the write |
 | Build structured booking payload | Code (from DB rows) | Hallucinated booking = lawsuit |
-| Write appointment to DB | Code | Must be durable and verifiable |
+| Write appointment to DB | Code, only after explicit confirmation | Must be durable and verifiable |
 | Write empathetic medical prose | LLM (prose, not JSON) | Style task — appropriate use |
 | Render bilingual UI confirmation | `presenter.py` (code) | Must match payload exactly |
 | Triage escalation decision | Code (protocol flag) | Safety-critical |
@@ -188,7 +189,10 @@ sequenceDiagram
     Chainlit-->>Patient: Answer + booking nudge
 ```
 
-### 5.2 Booking Request (with cross-turn slot-filling)
+### 5.2 Booking Request (cross-turn slot-filling + confirmation)
+
+Booking takes two turns: the resolved doctor/specialty/branch is surfaced for
+confirmation first (nothing is written), then an explicit "yes" commits it.
 
 ```mermaid
 sequenceDiagram
@@ -201,7 +205,7 @@ sequenceDiagram
     participant Repo
     participant Presenter
 
-    Patient->>Chainlit: "yes, book me with Dr. Sarah"
+    Patient->>Chainlit: "book me with Dr. Sarah"
     Chainlit->>Router: chat_turn(thread_id)  [clinical.specialty=Neurology in state]
     Router->>LLM: JSON-mode — {intent, action}
     LLM-->>Router: {intent: "action", action: "book"}
@@ -211,8 +215,18 @@ sequenceDiagram
     Note over Action: specialty=null → filled from<br/>state.clinical.suggested_specialization_id
     Action->>Matching: resolve_doctor("Dr. Sarah", filter=Neurology)
     Matching-->>Action: DOC-001 (unique match)
+    Note over Action: NOT written yet — stash pending_booking={doctor_id}
+    Action->>Presenter: offer (doctor + specialty + branch)
+    Presenter-->>Chainlit: "I'll book Dr. Sarah Hassan (Neurology, Cairo). Confirm?"
+    Chainlit-->>Patient: confirmation question
+
+    Patient->>Chainlit: "yes" (or "اه" / "exactly")
+    Chainlit->>Router: chat_turn(thread_id)  [pending_booking set]
+    Router->>LLM: CONFIRM_SYSTEM — {decision}
+    LLM-->>Router: {decision: "yes"}  (heuristic fallback if model unsure)
+    Router->>Action: intent=action, action=book
     Action->>Repo: create_appointment(DOC-001, thread_id)
-    Repo-->>Action: APT-000042 (row written to appointments table)
+    Repo-->>Action: APT-000042 (row written), pending cleared
     Action->>Presenter: render_response(payload, language="en")
     Presenter-->>Chainlit: Human-readable confirmation + raw JSON
     Chainlit-->>Patient: ✅ Booking confirmed — APT-000042
@@ -327,10 +341,15 @@ stateDiagram-v2
 
     EntityResolution --> AmbiguityCheck : specialty provided
 
-    AmbiguityCheck --> Clarification : Multiple doctor matches
-    Clarification --> EntityResolution : Patient selects
+    AmbiguityCheck --> Clarification : Several doctors match<br/>(by name, specialty, or branch)
+    Clarification --> EntityResolution : Patient adds specialty / branch / picks
 
-    AmbiguityCheck --> WriteDB : Unique match
+    AmbiguityCheck --> Offer : Unique match
+
+    Offer --> AwaitConfirm : surface doctor+specialty+branch<br/>pending_booking set, nothing written
+    AwaitConfirm --> Offer : unclear reply → re-ask yes/no
+    AwaitConfirm --> Aborted : "no" → nothing written
+    AwaitConfirm --> WriteDB : "yes" (LLM-understood, heuristic fallback)
 
     WriteDB --> Confirmed : appointments row written<br/>APT-XXXXXX assigned
 
@@ -338,11 +357,12 @@ stateDiagram-v2
     Confirmed --> CancelRequest : "cancel my booking"
 
     CancelRequest --> AmbiguousCancel : Multiple active bookings
-    AmbiguousCancel --> CancelRequest : Patient provides APT-XXXXXX
+    AmbiguousCancel --> CancelRequest : Patient names the doctor<br/>or gives APT-XXXXXX
 
     CancelRequest --> Cancelled : Unique match<br/>status flipped in DB
 
     Cancelled --> [*]
+    Aborted --> [*]
     Listed --> [*]
 ```
 
@@ -508,32 +528,37 @@ contradict the machine-readable data shown below it.
 
 ```mermaid
 flowchart TB
-    subgraph Suite["42 Deterministic Tests  (pytest)"]
-        TG["test_graph.py<br/>• routing decisions (EN + AR)<br/>• cross-turn slot-fill<br/>• payload shape<br/>• ambiguity refusal<br/>• regression: extractor field leakage"]
-        TB["test_bookings.py<br/>• full booking lifecycle<br/>• cancellation<br/>• list bookings<br/>• scoped to thread_id"]
-        TM["test_matching.py<br/>• bilingual name scoring<br/>• Arabic normalization<br/>• title stripping<br/>• ambiguity cases"]
+    subgraph Suite["59 Deterministic Tests  (pytest)"]
+        TG["test_graph.py<br/>• routing decisions (EN + AR)<br/>• cross-turn slot-fill<br/>• triage escalation gate<br/>• ambiguity refusal"]
+        TB["test_bookings.py<br/>• booking confirmation (yes/no/unclear)<br/>• same-name + branch disambiguation<br/>• cancel by name / modify<br/>• list bookings, scoped to thread_id"]
+        TM["test_matching.py<br/>• bilingual name scoring<br/>• Arabic normalization / title stripping<br/>• same-name-same-specialty (branch)"]
         TR["test_retrieval.py<br/>• lexical keyword hits<br/>• hybrid score blending<br/>• graceful degradation<br/>(no embedder)"]
     end
 
     FakeLLM["🤖 FakeLLM<br/>scripted response queue<br/>(conftest.py)"]
-    NoServer["No model server<br/>required — all 42 pass<br/>with pip install only"]
+    Backend["Runs against the configured<br/>backend (Supabase or SQLite);<br/>cleans up only its own rows"]
 
     Suite --> FakeLLM
-    FakeLLM --> NoServer
+    FakeLLM --> Backend
 ```
 
 **Testing philosophy**: the suite tests the system's *guarantees*, not the
 model's output. `FakeLLM` returns scripted responses so every assertion is
-deterministic — routing logic, entity resolution, payload construction,
-booking writes, and refusal behavior are all verifiable without a running
-Ollama server.
+deterministic — routing, entity resolution, booking confirmation, payload
+construction, and refusal behavior are all verifiable without a running Ollama
+server. The tests run against whichever backend `.env` selects, so with
+`APP_DATABASE_URL` set they exercise Supabase end-to-end.
 
-**Two-layer bug defenses** (from live testing):
-1. Extractor emitting `"Neurology"` as `doctor_name` → prompt fix **+**
-   deterministic guard that rejects a doctor_name matching a known specialty.
-2. Router returning contradictory `intent=medical + action=list_doctors` →
-   prompt fix **+** code coercion: a named action overrides the intent field.
-   Each fix adds a regression test.
+**Two-layer bug defenses** (from live testing) — prompts improve the odds, code
+guarantees the outcome:
+1. Extractor emitting `"Neurology"` as `doctor_name` → prompt fix **+** guard
+   that rejects a doctor_name matching a known specialty.
+2. Router emitting contradictory `intent=medical + action=list_doctors` →
+   prompt fix **+** code coercion: a named action overrides the intent.
+3. Triage escalating on a weak emergency hit → score threshold on the match.
+4. Booking-edit hallucinating a reschedule → deterministic cancel-and-rebook.
+5. Confirmation missing a colloquial "اه" → LLM classifier with keyword
+   fallback. Each fix adds a regression test.
 
 ---
 
@@ -653,7 +678,7 @@ without a model server (§13).
 | README — AI model(s) used and why | ✅ | `README.md` §1 (model-choice table) |
 | README — prompt design strategy | ✅ | `README.md` §3 |
 | README — how to configure and run | ✅ | `README.md` §4, §7 |
-| **Generated hospital test dataset** | ✅ | `data/hospital_dataset.json` — Al-Mashreq Medical Group: 3 branches, 8 specializations, 18 doctors, 14 bilingual protocols |
+| **Generated hospital test dataset** | ✅ | `data/hospital_dataset.json` — Al-Mashreq Medical Group: 3 branches, 8 specializations, 23 doctors (incl. deliberate same-name/same-branch collisions), 14 bilingual protocols |
 | Example — multi-turn medical → booking suggestion | ✅ | `examples/01_multi_turn_medical_to_booking.md` (EN), `examples/02_arabic_medical_conversation.md` (AR) |
 | Example — asking about doctors / specializations | ✅ | `examples/03_data_lookups.md` |
 | Example — voice input transcribed & processed | ✅ | `examples/04_voice_input.md` |
