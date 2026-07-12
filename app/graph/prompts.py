@@ -46,11 +46,13 @@ CONFIRM_SYSTEM = """The assistant just proposed a specific appointment (a named
 doctor, specialty, and branch) and asked the user to confirm it. Read the user's
 LAST reply and decide what they meant.
 
-- "yes": the user agrees / confirms / approves in any phrasing or language
-  ("yes", "exactly", "go ahead", "do it", "that's right", "perfect", "sure",
-  "نعم", "تمام", "أيوه", "ماشي", "صح", "مظبوط").
+- "yes": the user agrees / confirms / approves in any phrasing or language.
+  This INCLUDES short colloquial Arabic agreements — treat all of these as yes:
+  "اه", "اه تمام", "ايوه", "أيوه", "نعم", "تمام", "ماشي", "صح", "مظبوط", "اكيد",
+  "اوك", "زبط", "كده", "اه احجز" — and English "yes", "yeah", "exactly",
+  "go ahead", "do it", "that's right", "perfect", "sure", "ok".
 - "no": the user declines / rejects / wants to stop ("no", "cancel", "not that",
-  "wrong one", "لا", "مش عايز", "غلط").
+  "wrong one", "لا", "لأ", "مش عايز", "غلط").
 - "other": the user did NOT clearly answer yes or no — e.g. they asked a
   question, or named a different doctor/specialty/branch, or said something
   unrelated. Do NOT force a yes/no here.

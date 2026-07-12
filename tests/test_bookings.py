@@ -263,6 +263,41 @@ def test_confirmation_accepts_varied_affirmatives(repo):
         assert committed.get("action") == "book_appointment", f"{affirm!r} should confirm"
 
 
+def test_confirmation_falls_back_to_heuristic_when_llm_uncertain(repo):
+    """When the confirmation LLM returns 'other' for a short token it should
+    have understood ('اه'), the decisive keyword heuristic breaks the tie."""
+    import json as _json
+    from app.graph.nodes import ChatbotEngine
+    from app.vectorstore import ProtocolRetriever
+
+    class UncertainLLM(FakeLLM):
+        def chat(self, system, messages, json_mode=False):
+            if "asked the user to confirm" in system:
+                return _json.dumps({"decision": "other"})  # model is unsure
+            return super().chat(system, messages, json_mode)
+
+    engine = ChatbotEngine(repo, ProtocolRetriever(repo, embedder=None), UncertainLLM())
+    assert engine._confirm_decision("اه") == "yes"        # heuristic rescues it
+    assert engine._confirm_decision("لا") == "no"
+    assert engine._confirm_decision("what time?") == "unclear"  # genuinely unclear
+
+
+def test_arabic_short_affirmatives_confirm(repo):
+    """Regression: a short colloquial Arabic yes ('اه', 'تمام', 'ايوه') must
+    confirm the pending booking. The model sometimes returns 'other' for these
+    tiny tokens, so the heuristic breaks the tie."""
+    for affirm in ["اه", "تمام", "ايوه", "اه احجز"]:
+        llm = FakeLLM(
+            router={"intent": "action", "action": "book"},
+            slots={"doctor_name": "Dr. Omar", "specialty": "Neurology", "branch": None},
+        )
+        graph, thread = run_graph(repo, llm)
+        offer = chat_turn(graph, thread, "احجزلي مع دكتور عمر في المخ والأعصاب")
+        assert "answer" in offer and "action" not in offer
+        committed = chat_turn(graph, thread, affirm)
+        assert committed.get("action") == "book_appointment", f"{affirm!r} should confirm"
+
+
 def test_unclear_reply_reasks_without_relisting(repo):
     """An ambiguous reply to a confirmation must re-ask yes/no, not silently
     re-offer (which looked stuck to the user)."""

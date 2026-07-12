@@ -85,16 +85,21 @@ class ChatbotEngine:
         else:
             history = self._history(state_or_text)
             text = self._last_user_message(state_or_text)
+        heuristic = self._confirm_decision_heuristic(text)
         try:
             raw = self.llm.chat(prompts.CONFIRM_SYSTEM, history, json_mode=True)
             decision = (extract_json(raw) or {}).get("decision")
             if decision in ("yes", "no"):
                 return decision
+            # The model was uncertain ("other"). If the reply is a clear,
+            # unambiguous affirmative/decline word, trust that — small local
+            # models sometimes miss short colloquial tokens like "اه"/"تمام"
+            # that the keyword list knows precisely.
             if decision == "other":
-                return "unclear"
+                return heuristic
         except Exception as exc:
             log.warning("confirmation LLM call failed (%s: %s) -> keyword fallback", type(exc).__name__, exc)
-        return self._confirm_decision_heuristic(text)
+        return heuristic
 
     # Offline fallback only — the LLM (CONFIRM_SYSTEM) is the primary path.
     _AFFIRM = ("yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm",
